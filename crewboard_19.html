@@ -1,0 +1,2836 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>CrewBoard</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<meta name="theme-color" content="#0B1626">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="CrewBoard">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-deep:#0B1626;
+    --panel:#12233A;
+    --panel-raised:#1A2E48;
+    --accent-amber:#F2A93B;
+    --accent-cyan:#4FD1C5;
+    --text-primary:#EDF1F7;
+    --text-muted:#8CA0BC;
+    --divider:#24384F;
+    --danger:#E8664F;
+  }
+  [data-theme="light"]{
+    --bg-deep:#F3F5F9;
+    --panel:#FFFFFF;
+    --panel-raised:#EEF1F6;
+    --accent-amber:#B8791F;
+    --accent-cyan:#0D8C7F;
+    --text-primary:#141B29;
+    --text-muted:#5C6C83;
+    --divider:#DCE3EC;
+    --danger:#C6432E;
+  }
+  [data-theme="light"] .app{background:linear-gradient(180deg,#F3F5F9 0%, #EDF1F7 100%);}
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;background:var(--bg-deep);}
+  body{font-family:'IBM Plex Sans', sans-serif; color:var(--text-primary); display:flex; justify-content:center; min-height:100vh;}
+  .app{width:100%; max-width:430px; min-height:100vh; background:linear-gradient(180deg,#0B1626 0%, #0D1B2E 100%); display:flex; flex-direction:column; position:relative; overflow:hidden;}
+  .mono{font-family:'IBM Plex Mono', monospace;}
+
+  header.top{padding:22px 20px 16px; border-bottom:1px solid var(--divider); display:flex; align-items:flex-start; gap:12px;}
+  .drawer-btn{background:transparent; border:none; color:var(--text-primary); font-size:22px; cursor:pointer; padding:2px 0 0; line-height:1; flex-shrink:0; -webkit-tap-highlight-color:transparent;}
+  .drawer-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1100;}
+  .drawer-overlay.open{display:block;}
+  .drawer-panel{position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:var(--panel); transform:translateX(-100%); transition:transform 0.25s ease; z-index:1101; padding:20px; box-sizing:border-box; overflow-y:auto;}
+  .drawer-overlay.open .drawer-panel{transform:translateX(0);}
+  .drawer-title{font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary);}
+  .drawer-item{display:flex; align-items:center; gap:10px; padding:14px 8px; border-radius:10px; cursor:pointer; color:var(--text-primary); font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; -webkit-tap-highlight-color:transparent;}
+  .drawer-item:active{background:var(--panel-raised, #1b2434);}
+  .swap-mini-input{flex:1; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:8px; color:var(--text-primary); font-size:12px; box-sizing:border-box;}
+  .avail-window{background:var(--panel); border:1px solid var(--divider); border-radius:12px; padding:12px 16px; margin-bottom:8px;}
+  .avail-window.past{opacity:0.5;}
+  .avail-window-dates{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; color:var(--text-primary);}
+  .eyebrow{font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.14em; color:var(--accent-cyan); text-transform:uppercase;}
+  h1.title{font-family:'Space Grotesk', sans-serif; font-size:26px; font-weight:700; margin:4px 0 0; letter-spacing:-0.01em;}
+
+  main{flex:1; overflow-y:auto; padding-bottom:90px;}
+  .tab-panel{display:none; padding:18px 20px 8px; animation:fadeIn .25s ease;}
+  .tab-panel.active{display:block;}
+  @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
+
+  .day-group{margin-bottom:16px;}
+  .day-label{font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--text-muted); letter-spacing:0.08em; margin-bottom:8px; display:flex; align-items:center; gap:8px;}
+  .day-label .line{flex:1; height:1px; background:var(--divider);}
+  .note-dot{color:var(--accent-cyan); font-size:8px; vertical-align:middle;}
+  #panel-roster.edit-mode-active{border:2px solid var(--danger); border-radius:14px; padding:10px; margin:-10px -10px 0;}
+  .edit-mode-banner{display:none; background:var(--danger); color:#fff; font-family:'IBM Plex Mono', monospace; font-size:11px; font-weight:600; letter-spacing:0.04em; text-align:center; padding:8px; border-radius:8px; margin-bottom:10px;}
+  #panel-roster.edit-mode-active .edit-mode-banner{display:block;}
+  .badge{font-size:9.5px; padding:2px 6px; border-radius:4px; border:1px solid var(--accent-amber); color:var(--accent-amber); margin-left:4px;}
+  .badge-chip{display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; border:1px solid; font-size:9px; font-weight:700; margin-left:3px; cursor:pointer; font-family:'IBM Plex Mono', monospace; -webkit-tap-highlight-color:transparent;}
+
+  .stub{background:var(--panel); border-radius:12px; border:1px solid var(--divider); padding:14px 16px; position:relative; margin-bottom:10px; opacity:0; animation:flapIn .4s ease forwards;}
+  @keyframes flapIn{0%{opacity:0; transform:translateY(8px) scaleY(0.94);} 100%{opacity:1; transform:translateY(0) scaleY(1);}}
+  .stub.off{background:transparent; border:1px dashed var(--divider); padding:12px 16px; color:var(--text-muted); font-size:13px; display:flex; justify-content:space-between; align-items:center;}
+  .stub.cxl{background:transparent; border:1px dashed var(--danger); padding:12px 16px; color:var(--text-muted); font-size:13px; display:flex; justify-content:space-between; align-items:center; opacity:0.75;}
+  .stub.standby{border:1px solid var(--accent-cyan);}
+  .day-edit-controls{display:flex; gap:6px; margin:-10px 0 8px;}
+  .day-edit-btn{font-family:'IBM Plex Mono', monospace; font-size:10px; padding:4px 8px; border-radius:6px; cursor:pointer; border:1px solid var(--divider); background:transparent; color:var(--text-muted);}
+  .day-edit-btn.cancel{border-color:var(--danger); color:var(--danger);}
+  .day-edit-btn.remove{border-color:var(--text-muted); color:var(--text-muted);}
+  .stub-head{display:flex; justify-content:space-between; align-items:center; font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--text-muted); margin-bottom:8px;}
+  .stub-head b{color:var(--text-primary); font-size:12.5px;}
+  .crew-btn{display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--panel-raised, #1b2434); border:1px solid var(--accent-cyan); color:var(--accent-cyan); font-size:11px; cursor:pointer; margin-left:6px; vertical-align:middle; -webkit-tap-highlight-color:transparent;}
+  .crew-btn.has-crew{background:var(--accent-cyan); color:var(--bg-deep);}
+  .crew-modal-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:flex-end; justify-content:center;}
+  .crew-modal-overlay.open{display:flex;}
+  .crew-modal{background:var(--panel); border-radius:16px 16px 0 0; width:100%; max-width:430px; padding:18px; max-height:70vh; overflow-y:auto; box-sizing:border-box;}
+  .crew-modal-title{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary);}
+  .crew-row{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--divider); font-size:13px; color:var(--text-primary);}
+  .crew-row:last-child{border-bottom:none;}
+  .crew-pos{color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:11px;}
+  .leg-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--divider); gap:8px;}
+  .leg-row:last-child{border-bottom:none;}
+  .unsched-wrap{display:flex; align-items:center; cursor:pointer; flex-shrink:0;}
+  .unsched-wrap input{position:absolute; opacity:0; width:0; height:0;}
+  .unsched-wrap .cbox{width:16px; height:16px; border:1.5px solid var(--text-muted); border-radius:4px; display:block; position:relative; transition:all .15s ease;}
+  .unsched-wrap input:checked + .cbox{background:var(--danger); border-color:var(--danger);}
+  .unsched-wrap input:checked + .cbox::after{content:''; position:absolute; left:4px; top:1px; width:4px; height:8px; border:solid var(--bg-deep); border-width:0 2px 2px 0; transform:rotate(45deg);}
+  .leg-flt{font-family:'IBM Plex Mono', monospace; color:var(--accent-amber); font-size:12px; min-width:64px;}
+  .leg-route{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14.5px; flex:1; text-align:center;}
+  .leg-time{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted); text-align:right;}
+  .standby-time{font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--accent-cyan);}
+  .load-btn{display:block; width:100%; text-align:center; background:var(--accent-cyan); color:var(--bg-deep); border:none; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; padding:12px; border-radius:10px; cursor:pointer; box-sizing:border-box;}
+
+  .cal-month-label{font-family:'Space Grotesk', sans-serif; font-size:15px; font-weight:600; margin:18px 0 8px; color:var(--accent-cyan);}
+  .cal-month-label:first-child{margin-top:2px;}
+  .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px; margin-bottom:4px;}
+  .cal-weekday{font-family:'IBM Plex Mono', monospace; font-size:9.5px; color:var(--text-muted); text-align:center; letter-spacing:0.04em; text-transform:uppercase; padding-bottom:3px;}
+  .cal-cell{background:var(--panel); border:1px solid var(--divider); border-radius:8px; padding:5px 3px; min-height:58px; display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center;}
+  .cal-cell.empty{background:transparent; border-color:transparent;}
+  .cal-cell.duty{border-color:var(--accent-amber);}
+  .cal-cell.layover{border-color:var(--accent-cyan);}
+  .cal-cell.ins{border-color:var(--text-muted);}
+  .cal-cell.standby{border:1px dotted var(--accent-cyan);}
+  .cal-cell.off{background:transparent; border-style:dashed;}
+  .cal-date{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted);}
+  .cal-dest{font-size:9.5px; font-weight:600; line-height:1.2; display:flex; align-items:center; gap:2px; color:var(--text-primary);}
+  .cal-legend{display:flex; flex-wrap:wrap; gap:12px 16px; margin:16px 0 6px; font-size:11px; color:var(--text-muted);}
+  .cal-legend-item{display:flex; align-items:center; gap:5px;}
+  .cal-dot{width:9px; height:9px; border-radius:3px; display:inline-block; flex-shrink:0;}
+  .load-btn:active{opacity:0.85;}
+  #review-panel .stub{opacity:1; animation:none;}
+
+  .gauge-card{background:var(--panel); border:1px solid var(--divider); border-radius:16px; padding:22px 20px; text-align:center; margin-bottom:18px;}
+  .gauge-label{font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.1em; color:var(--text-muted); text-transform:uppercase;}
+  .gauge-value{font-family:'Space Grotesk', sans-serif; font-size:40px; font-weight:700; color:var(--accent-amber); margin:6px 0 2px;}
+  .gauge-sub{font-size:12px; color:var(--text-muted);}
+  .thresh-row{display:flex; justify-content:space-between; align-items:baseline; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted); margin-bottom:5px;}
+  .thresh-row b{color:var(--text-primary); font-size:13px;}
+  .thresh-bar{height:8px; border-radius:4px; background:var(--panel-raised, #1b2434); overflow:hidden; margin-bottom:14px;}
+  .thresh-fill{height:100%; border-radius:4px; transition:width 0.3s;}
+  .next-duty-card{background:linear-gradient(135deg, var(--panel), var(--panel-raised, #1b2434)); border:1px solid var(--accent-cyan); border-radius:14px; padding:16px 18px; margin-bottom:16px;}
+  .next-duty-label{font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.1em; color:var(--accent-cyan); text-transform:uppercase; margin-bottom:6px;}
+  .next-duty-main{font-family:'Space Grotesk', sans-serif; font-size:19px; font-weight:600; color:var(--text-primary);}
+  .next-duty-sub{font-size:12.5px; color:var(--text-muted); margin-top:4px;}
+  .trip-note-input{width:100%; box-sizing:border-box; margin-top:6px; background:transparent; border:1px dashed var(--divider); border-radius:8px; padding:8px 10px; font-family:'IBM Plex Sans', sans-serif; font-size:12px; color:var(--text-primary);}
+  .trip-note-input::placeholder{color:var(--text-muted);}
+  .collapse-section{margin-bottom:10px; border:1px solid var(--divider); border-radius:12px; overflow:hidden;}
+  .collapse-header{display:flex; justify-content:space-between; align-items:center; padding:12px 14px; cursor:pointer; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; color:var(--text-primary); background:var(--panel); -webkit-tap-highlight-color:transparent;}
+  .collapse-chevron{transition:transform 0.25s; color:var(--text-muted); font-size:12px;}
+  .collapse-section.collapsed .collapse-chevron{transform:rotate(-90deg);}
+  .collapse-body{max-height:3000px; overflow:hidden; transition:max-height 0.3s ease, padding 0.3s ease; padding:0 14px 14px;}
+  .collapse-section.collapsed .collapse-body{max-height:0; padding:0 14px;}
+  .breakdown{margin:16px 0;}
+  .brk-row{display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--divider); font-size:13.5px;}
+  .brk-row:last-child{border-bottom:none; font-weight:600;}
+  .brk-row span.val{font-family:'IBM Plex Mono', monospace; color:var(--text-primary);}
+  .field-group{margin-bottom:14px;}
+  .field-group label{display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px; font-family:'IBM Plex Mono', monospace; letter-spacing:0.04em;}
+  .field-group .input-wrap{display:flex; align-items:center; background:var(--panel-raised); border:1px solid var(--divider); border-radius:9px; padding:0 12px;}
+  .field-group .input-wrap span{color:var(--text-muted); font-size:13px; margin-right:4px;}
+  .field-group input{background:transparent; border:none; outline:none; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:15px; padding:11px 0; width:100%;}
+  .two-col{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
+
+  .open-card{background:var(--panel); border:1px solid var(--divider); border-radius:12px; padding:15px 16px; margin-bottom:12px;}
+  .open-top{display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;}
+  .open-route{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:16px;}
+  .open-pay{font-family:'IBM Plex Mono', monospace; color:var(--accent-cyan); font-size:13px;}
+  .open-meta{font-size:12px; color:var(--text-muted); margin-bottom:12px;}
+  .req-btn{width:100%; background:transparent; border:1.5px solid var(--accent-amber); color:var(--accent-amber); font-family:'IBM Plex Mono', monospace; font-size:12.5px; letter-spacing:0.06em; text-transform:uppercase; padding:10px; border-radius:8px; cursor:pointer; transition:all .15s ease;}
+  .req-btn:active{background:var(--accent-amber); color:var(--bg-deep);}
+  .req-btn.sent{border-color:var(--accent-cyan); color:var(--accent-cyan); pointer-events:none;}
+  .tag-sample{display:inline-block; font-family:'IBM Plex Mono', monospace; font-size:9.5px; letter-spacing:0.08em; color:var(--text-muted); border:1px solid var(--divider); padding:2px 6px; border-radius:4px; text-transform:uppercase; margin-bottom:12px;}
+
+  .share-preview{background:var(--panel); border:1px solid var(--divider); border-radius:14px; padding:18px; margin-bottom:16px;}
+  .share-preview .sp-title{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:12px;}
+  .sp-line{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--divider); font-size:13.5px;}
+  .sp-line:last-child{border-bottom:none;}
+  .sp-line .d{color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:12px; text-align:right;}
+  .share-btn{width:100%; background:var(--accent-amber); color:var(--bg-deep); border:none; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14.5px; padding:13px; border-radius:10px; cursor:pointer;}
+  .share-btn:active{opacity:0.85;}
+  .help-text{font-size:12px; color:var(--text-muted); margin-top:10px; text-align:center; line-height:1.5;}
+
+  .toast{position:absolute; bottom:96px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--panel-raised); border:1px solid var(--accent-cyan); color:var(--text-primary); padding:10px 16px; border-radius:8px; font-size:12.5px; opacity:0; pointer-events:none; transition:all .25s ease; white-space:nowrap; z-index:50;}
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
+
+  nav.tabs{position:absolute; bottom:0; left:0; right:0; display:flex; background:rgba(18,35,58,0.92); backdrop-filter:blur(10px); border-top:1px solid var(--divider); padding:10px 6px calc(10px + env(safe-area-inset-bottom));}
+  .tab-btn{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.04em; padding:6px 2px; cursor:pointer; text-transform:uppercase;}
+  .tab-btn svg{width:20px; height:20px; stroke:var(--text-muted); fill:none; stroke-width:1.7;}
+  .tab-btn.active{color:var(--accent-amber);}
+  .tab-btn.active svg{stroke:var(--accent-amber);}
+  ::-webkit-scrollbar{width:0px;}
+  @media print{
+    body{background:#fff;}
+    .app{background:#fff; max-width:none;}
+    .tabs, .load-btn, #edit-mode-btn, #add-flight-form, .day-edit-controls, .trip-note-input, #family-image-container, .share-btn, .drawer-overlay, .crew-modal-overlay, .drawer-btn{display:none !important;}
+    .tab-panel{display:none !important;}
+    #panel-salary{display:block !important;}
+    .breakdown, .gauge-card, .thresh-bar{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
+    input{border:none !important; color:#000 !important;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="top">
+    <button class="drawer-btn" onclick="openDrawer()" aria-label="Menu">☰</button>
+    <div style="flex:1;">
+      <div class="eyebrow">ISRAIR · FO A320 · TLV BASE</div>
+      <h1 class="title" id="header-title">Roster</h1>
+    </div>
+  </header>
+
+  <main id="main-content">
+    <section class="tab-panel active" id="panel-roster">
+      <div class="edit-mode-banner">✏️ EDIT MODE — cancel/remove/add changes apply immediately</div>
+      <div class="next-duty-card" id="next-duty-card">
+        <div class="next-duty-label">Next Duty</div>
+        <div class="next-duty-main" id="next-duty-main">Loading…</div>
+        <div class="next-duty-sub" id="next-duty-sub"></div>
+      </div>
+      <label for="pdf-input" class="load-btn">Load Roster (PDF / CSV)</label>
+      <input type="file" id="pdf-input" accept="application/pdf,.pdf,.csv,text/csv" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
+      <label for="csv-input" class="load-btn" style="background:var(--panel); border:1px solid var(--accent-cyan); color:var(--accent-cyan); margin-top:8px;">Load Roster (CSV / XLSX)</label>
+      <input type="file" id="csv-input" accept=".csv,.xlsx,.xls" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
+      <div id="parse-status" class="help-text" style="display:none; margin-top:10px;"></div>
+      <div id="review-panel" style="display:none; margin-top:14px;"></div>
+      <button class="load-btn" id="edit-mode-btn" style="background:var(--panel); border:1px solid var(--accent-cyan); color:var(--accent-cyan); margin-top:8px;" onclick="toggleEditMode()">Enter Edit Mode</button>
+      <button class="load-btn" id="check-all-btn" style="background:var(--panel); border:1px solid var(--accent-amber); color:var(--accent-amber); margin-top:8px;" onclick="checkAllMissingFlights()">Check All Missing Flights</button>
+      <button class="load-btn" id="fill-layovers-btn" style="background:var(--panel); border:1px solid #8B6FD9; color:#8B6FD9; margin-top:8px;" onclick="fillImplicitLayovers()">Fill Implied Layovers</button>
+      <div id="layover-review-panel"></div>
+      <div id="add-flight-form" style="display:none; margin-top:12px; border:1px solid var(--accent-cyan); border-radius:12px; padding:12px; background:var(--panel);">
+        <div class="eyebrow" style="margin-bottom:8px;">Add Flight</div>
+
+        <label style="font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Paste WhatsApp assignment message</label>
+        <textarea id="wa-paste" rows="3" placeholder="Paste the crew assignment message here…" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Sans', sans-serif; font-size:13px; resize:vertical;"></textarea>
+        <button class="load-btn" style="background:var(--panel-raised, #1b2434); border:1px solid var(--accent-cyan); color:var(--accent-cyan); margin-top:8px; margin-bottom:4px;" onclick="parseWhatsAppMessage()">Parse Message</button>
+        <div id="wa-parse-status" class="help-text" style="display:none; margin-top:4px;"></div>
+        <div class="help-text" style="margin-top:4px; margin-bottom:12px;">Best-effort — fills in what it can find (date, times, route) below so you can check and correct before adding. It won't guess block hours; you still enter those.</div>
+
+        <div class="field-group"><label>Date (DD/MM)</label><div class="input-wrap"><input type="text" id="af-date" placeholder="19/09"></div></div>
+        <div class="field-group"><label>Weekday</label><div class="input-wrap">
+          <select id="af-day" style="width:100%; background:transparent; border:none; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:14px; padding:10px 0;">
+            <option value="SUN">Sunday</option><option value="MON">Monday</option><option value="TUE">Tuesday</option><option value="WED">Wednesday</option><option value="THU">Thursday</option><option value="FRI">Friday</option><option value="SAT">Saturday</option>
+          </select>
+        </div></div>
+        <div class="field-group"><label>Report (local, HH:MM)</label><div class="input-wrap"><input type="text" id="af-report" placeholder="05:00"></div></div>
+        <div class="field-group"><label>Debrief (local, HH:MM)</label><div class="input-wrap"><input type="text" id="af-debrief" placeholder="11:30"></div></div>
+        <div class="field-group"><label>Route (e.g. TLV-ATH-TLV)</label><div class="input-wrap"><input type="text" id="af-route" placeholder="TLV-ATH-TLV" oninput="renderAddFlightLegInputs()"></div></div>
+        <div id="af-leg-inputs"></div>
+        <label class="unsched-wrap" style="display:flex; align-items:center; gap:8px; margin:10px 0; font-family:'IBM Plex Mono', monospace; font-size:12px; color:var(--text-muted);">
+          <input type="checkbox" id="af-unsched" checked><span>Unscheduled / late-notice addition (1.5×)</span>
+        </label>
+        <div class="help-text" style="margin-top:0; margin-bottom:10px;">Leg clock times (for Shabbat detection) are estimated from Report + cumulative block hours — an approximation, not your exact schedule.</div>
+        <button class="load-btn" onclick="submitAddFlight()">Add to Roster</button>
+      </div>
+      <div class="help-text" style="margin-top:14px; margin-bottom:16px;">Check a flight's box if it was unscheduled — its block hours count at 1.5×. Shabbat (Fri 19:00 – Sat 19:00 Israel time) is auto-detected (SHB badge) — capped at 2× if a leg is both unscheduled and Shabbat. Holiday-eve/holiday dates (HOL badge) pay flat 2×. A day's 2nd separate flight activity (2nd ACT badge) pays 1.5× — doesn't apply to one continuous multi-destination trip. From your 14th activity day onward (DUTY + LAYOVER count, standby doesn't), duty days get an extra 1.5× (red badge). Any block hours flown this period above 83h earn a further 1.5×. Cancelled flights (CXL) earn a flat 3h credit.</div>
+      <div id="roster-list"></div>
+    </section>
+
+    <section class="tab-panel" id="panel-salary">
+      <div class="gauge-card">
+        <div class="gauge-label">Total Income · This Period</div>
+        <div class="gauge-value" id="salary-total">₪0</div>
+        <div class="gauge-sub">calculating…</div>
+      </div>
+
+      <div class="thresh-row"><span>Block hours flown</span><b id="thresh-block-label">0.00h / 83h</b></div>
+      <div class="thresh-bar"><div class="thresh-fill" id="thresh-block-fill" style="width:0%; background:var(--accent-cyan);"></div></div>
+      <div class="thresh-row"><span>Duty days this period</span><b id="thresh-duty-label">0 / 13</b></div>
+      <div class="thresh-bar"><div class="thresh-fill" id="thresh-duty-fill" style="width:0%; background:var(--accent-amber);"></div></div>
+
+      <div class="breakdown" style="margin-top:0;">
+        <div class="brk-row"><span>Flight block credit <span class="mono" style="font-size:9px; color:var(--text-muted);">(incl. Shabbat/holiday/day-14+/unsched/2nd-activity)</span></span><span class="val" id="brk-block">0.00h</span></div>
+        <div class="brk-row"><span>Monthly overage bonus <span class="mono" style="font-size:9px; color:var(--text-muted);">(&gt;83h flown, +0.5×/hr)</span></span><span class="val" id="brk-overage">0.00h</span></div>
+        <div class="mono" id="brk-overage-sub" style="font-size:9.5px; color:var(--text-muted); margin:-4px 0 6px;"></div>
+        <div class="brk-row"><span>Completion <span class="mono" style="font-size:9px; color:var(--text-muted);">(tops up BT+TT to 5h intl / 4h turn / 3h Eilat)</span></span><span class="val" id="brk-completion">0.00h</span></div>
+      </div>
+
+      <div class="breakdown" style="margin-top:8px; border-color:var(--accent-cyan);">
+        <div class="brk-row"><span style="color:var(--accent-cyan); font-weight:600;">Total Incentives</span><span class="val" id="brk-total-incentives" style="color:var(--accent-cyan); font-weight:600;">0.00h</span></div>
+      </div>
+
+      <div class="collapse-section" data-collapse-id="nfa">
+        <div class="collapse-header" onclick="toggleCollapse(this)"><span>NFA — Non-Flight Activity</span><span class="collapse-chevron">▾</span></div>
+        <div class="collapse-body">
+          <div class="breakdown" style="margin-top:0;">
+            <div class="brk-row"><span>Standby credit (2.5h each)</span><span class="val" id="brk-standby">0.00h</span></div>
+            <div class="brk-row"><span>Paid day off credit (3h each)</span><span class="val" id="brk-paidoff">0.00h</span></div>
+            <div class="brk-row"><span>Instruction credit (3h each)</span><span class="val" id="brk-ins">0.00h</span></div>
+            <div class="brk-row"><span>Cancelled flight credit (3h each)</span><span class="val" id="brk-cxl">0.00h</span></div>
+            <div class="brk-row"><span>NFA total</span><span class="val" id="brk-nfa-total">0.00h</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="collapse-section" data-collapse-id="ground">
+        <div class="collapse-header" onclick="toggleCollapse(this)"><span>Ground Activity <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(manual)</span></span><span class="collapse-chevron">▾</span></div>
+        <div class="collapse-body">
+          <div class="field-group">
+            <label>Training / Refresher credit (h)</label>
+            <div class="input-wrap"><input type="number" id="ga-training" value="0" step="0.25"></div>
+          </div>
+          <div class="field-group">
+            <label>Special Project credit (h)</label>
+            <div class="input-wrap"><input type="number" id="ga-project" value="0" step="0.25"></div>
+          </div>
+          <div class="field-group">
+            <label>Special Calls credit (h)</label>
+            <div class="input-wrap"><input type="number" id="ga-specialcall" value="0" step="0.25"></div>
+          </div>
+          <div class="field-group">
+            <label>Cancelled Assignment credit (h)</label>
+            <div class="input-wrap"><input type="number" id="ga-cancelled" value="0" step="0.25"></div>
+          </div>
+          <div class="breakdown" style="margin-top:0;">
+            <div class="brk-row"><span>Ground activity total</span><span class="val" id="brk-ga-total">0.00h</span></div>
+          </div>
+        </div>
+      </div>
+
+      <div class="field-group">
+        <label>Layover Credit (h, manual — see roster for layovers)</label>
+        <div class="input-wrap"><input type="number" id="layover-hours" value="17.34" step="0.1"></div>
+      </div>
+      <div class="breakdown" style="margin-top:0;">
+        <div class="brk-row"><span>Total credit hours</span><span class="val" id="brk-credit-total">0.00h</span></div>
+      </div>
+
+      <div class="breakdown">
+        <div class="brk-row"><span>Credit pay (total credit hrs × rate)</span><span class="val" id="brk-flight">₪0</span></div>
+        <div class="brk-row"><span>Seniority added value</span><span class="val" id="brk-seniority">₪0</span></div>
+        <div class="brk-row"><span>Transportation (<span id="lbl-flightdays-1">0</span> TLV-depart/arrive days × rate)</span><span class="val" id="brk-transport">₪0</span></div>
+        <div class="brk-row"><span>Per diem (<span id="lbl-perdiem-units">0</span> units × rate)</span><span class="val" id="brk-perdiem">$0</span></div>
+        <div class="brk-row"><span>Per diem in ₪ (× fx rate)</span><span class="val" id="brk-perdiem-ils">₪0</span></div>
+        <div class="brk-row"><span>Total income</span><span class="val" id="brk-total-income">₪0</span></div>
+      </div>
+      <div class="help-text">Two currencies, shown separately — your credit pay is in shekels, per diem in dollars, so they're not added together. Standby/paid-off/instruction credit and flight-day count update automatically from whatever roster is loaded; layover stays a manual field since it needs cross-checking against consecutive duty days.</div>
+
+      <button class="load-btn" style="background:var(--panel); border:1px solid var(--divider); color:var(--text-primary); margin-top:6px;" onclick="window.print()">Print / Save as PDF</button>
+
+      <div class="collapse-section" data-collapse-id="reconcile">
+        <div class="collapse-header" onclick="toggleCollapse(this)"><span>Reconcile vs. Real Payslip</span><span class="collapse-chevron">▾</span></div>
+        <div class="collapse-body">
+          <div class="help-text" style="margin-top:0;">Load your mid-month or end-of-month actual-times file — if it only covers half the period, the comparison automatically limits itself to whatever dates the file actually shows, instead of assuming the full month. This isn't about getting ₪0 difference — it's an audit tool: if Actual comes in below Predicted, that can mean crew assignment missed an incentive you were owed, worth double-checking with them.</div>
+          <label for="recon-file-input" class="load-btn" style="background:var(--panel-raised, #1b2434); border:1px solid var(--accent-cyan); color:var(--accent-cyan);">Load Fanfare</label>
+          <input type="file" id="recon-file-input" accept=".csv,.xlsx,.xls" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
+          <div id="recon-file-status" class="help-text" style="display:none; margin-top:8px;"></div>
+          <div id="recon-file-result"></div>
+
+          <div class="eyebrow" style="margin-top:18px; margin-bottom:4px;">Or Enter Manually</div>
+          <div class="field-group">
+            <label>Actual Total Income (₪, from real payslip)</label>
+            <div class="input-wrap"><span>₪</span><input type="number" id="recon-actual" step="1" placeholder="0"></div>
+          </div>
+          <div class="breakdown" style="margin-top:0;">
+            <div class="brk-row"><span>App predicted</span><span class="val" id="recon-predicted">₪0</span></div>
+            <div class="brk-row"><span>Actual (entered above)</span><span class="val" id="recon-actual-display">₪0</span></div>
+            <div class="brk-row"><span>Difference</span><span class="val" id="recon-diff">₪0</span></div>
+          </div>
+        </div>
+      </div>
+
+    </section>
+
+    <section class="tab-panel" id="panel-calendar">
+      <div id="calendar-body"></div>
+    </section>
+
+    <section class="tab-panel" id="panel-share">
+      <div class="eyebrow" style="margin-bottom:8px;">Family Calendar (Image)</div>
+      <button class="load-btn" onclick="generateFamilyImage()">Generate Calendar Image</button>
+      <div id="family-image-container" style="margin-top:12px;"></div>
+      <div class="help-text" style="margin-top:10px; margin-bottom:16px;">A calendar picture with just Report/Debrief times and Home/Away — no duty codes, no pay details. Save it or share it straight from your photos.</div>
+
+      <div class="eyebrow" style="margin-bottom:8px;">Text Summary</div>
+      <div class="share-preview">
+        <div class="sp-title">What your family sees</div>
+        <div class="sp-line"><span>Aug 30 → Sep 2</span><span class="d">Tel Aviv → New York<br>(2 nights)</span></div>
+        <div class="sp-line"><span>Sep 11 → 13</span><span class="d">Tel Aviv → Budapest<br>(2 nights)</span></div>
+        <div class="sp-line"><span>Sep 15 → 17</span><span class="d">Tel Aviv → New York<br>(1 night)</span></div>
+        <div class="sp-line"><span>Aug 21, 23–24</span><span class="d">Home — paid leave</span></div>
+      </div>
+      <button class="share-btn" onclick="shareRoster()">Share This Roster</button>
+      <div class="help-text">Sends a simple, readable version of your trip dates — no login or duty codes required on their end.</div>
+    </section>
+
+    <section class="tab-panel" id="panel-settings">
+      <div class="eyebrow" style="margin-bottom:8px;">Appearance</div>
+      <button class="load-btn" id="theme-toggle-btn" onclick="toggleTheme()" style="background:var(--panel-raised); border:1px solid var(--divider); color:var(--text-primary);">☀️ Light</button>
+
+      <div class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Pay Rates</div>
+      <div class="field-group">
+        <label>Hourly Rate (₪/credit hr) <span class="mono" style="font-size:9px; color:var(--text-muted);">(base + CPI + seniority row, from your payslip)</span></label>
+        <div class="input-wrap"><span>₪</span><input type="number" id="rate-hourly" value="503.19" step="1"></div>
+      </div>
+      <div class="field-group">
+        <label>Per Diem Rate ($/unit)</label>
+        <div class="input-wrap"><span>$</span><input type="number" id="rate-perdiem" value="85" step="5"></div>
+      </div>
+      <div class="field-group">
+        <label>Seniority Added Value (₪)</label>
+        <div class="input-wrap"><span>₪</span><input type="number" id="seniority-value" value="0" step="50"></div>
+      </div>
+      <div class="field-group">
+        <label>USD → ILS Exchange Rate</label>
+        <div class="input-wrap"><input type="number" id="fx-rate" value="3.05" step="0.01"></div>
+      </div>
+      <div class="field-group">
+        <label>Transportation Rate (₪/unit)</label>
+        <div class="input-wrap"><span>₪</span><input type="number" id="rate-transport" value="58.41" step="0.01"></div>
+      </div>
+      <div class="help-text" style="margin-top:-8px;">1 unit for each day your first leg departs FROM home base, plus 1 unit for each day your last leg arrives AT home base. A same-day round trip earns 2 (out + back); a multi-day layover pairing also earns 2 total (the outbound day, the return day) — the layover days themselves earn nothing.</div>
+      <div class="help-text">These rates are saved on this device and apply to every roster period until you change them here.</div>
+
+      <div class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Flight Tracker <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(for the 🔍 Check Actual button on the Roster tab)</span></div>
+      <div class="field-group">
+        <label>AviationStack API Key</label>
+        <div class="input-wrap"><input type="text" id="flight-api-key" placeholder="paste your key"></div>
+      </div>
+      <div class="field-group">
+        <label>Airline IATA Code</label>
+        <div class="input-wrap"><input type="text" id="flight-airline-code" value="6H"></div>
+      </div>
+      <div class="help-text" style="margin-top:0;">Uses AviationStack's free tier. Two real limits worth knowing: it typically only has data for very recent/current flights, not older historical dates — and it's queried over plain HTTP, not HTTPS, so it may fail on stricter networks. Always check the date/route it returns actually matches before trusting the result — it can return a different day's flight under the same number.</div>
+
+      <div class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Commute <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(used on the family calendar image)</span></div>
+      <div class="field-group">
+        <label>Driving time to the airport, one way (minutes)</label>
+        <div class="input-wrap"><input type="number" id="drive-time-minutes" value="0" step="5"></div>
+      </div>
+      <div class="help-text" style="margin-top:0;">The Share tab's family calendar image will show when you actually leave and get home, not just your report/debrief times.</div>
+
+      <div class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Route Block-Hour Estimates <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(fills in flights missing real times)</span></div>
+      <div class="help-text" style="margin-top:0;">Future/unflown legs have no real time data yet, so they show blank. One line per route, e.g. <span class="mono">TLV-BUD: 3.4</span> — any leg missing real block hours will use this as an estimate instead, clearly marked as estimated rather than confirmed. Direction matters if it differs (winds etc.) — add both TLV-BUD and BUD-TLV separately if needed.</div>
+      <textarea id="route-estimates" rows="12" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:12px;" placeholder="TLV-BUD: 3.4&#10;BUD-TLV: 3.6&#10;TLV-JFK: 12.1&#10;JFK-TLV: 11.3">TLV-BUD: 3.5
+BUD-TLV: 3.5
+TLV-LCA: 1
+LCA-TLV: 1
+TLV-BUS: 2
+BUS-TLV: 2
+TLV-VAR: 2
+VAR-TLV: 2
+TLV-PVK: 2.2
+PVK-TLV: 2
+TLV-ATH: 2
+ATH-TLV: 2
+TLV-SZG: 3.5
+SZG-TLV: 3.2
+TLV-FCO: 3.1
+FCO-TLV: 3
+TLV-JFK: 12.5
+JFK-TLV: 11.5
+TLV-GYD: 3
+GYD-TLV: 3.5
+TLV-RHO: 1.25
+RHO-TLV: 1.25
+TLV-PFO: 1
+PFO-TLV: 1
+TLV-ETH: 1
+ETH-TLV: 1</textarea>
+    </section>
+
+    <section class="tab-panel" id="panel-swap">
+      <div class="eyebrow" style="margin-bottom:4px;">Swap Requests <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(manual for now)</span></div>
+      <div class="help-text" style="margin-top:0;">Track a trip you'd like to swap — who might be relevant, and where it stands. Once server access is available, this is where a real crew-matching feed would plug in instead of manual entry.</div>
+      <div class="field-group"><label>Date (DD/MM)</label><div class="input-wrap"><input type="text" id="swap-date" placeholder="19/09"></div></div>
+      <div class="field-group"><label>Route / Trip</label><div class="input-wrap"><input type="text" id="swap-route" placeholder="TLV-ATH-TLV"></div></div>
+      <div class="field-group"><label>Reason / Note (optional)</label><div class="input-wrap"><input type="text" id="swap-note" placeholder="Family event"></div></div>
+      <button class="load-btn" onclick="addSwapRequest()">Add Swap Request</button>
+      <div id="swap-list" style="margin-top:16px;"></div>
+    </section>
+
+    <section class="tab-panel" id="panel-availability">
+      <div class="eyebrow" style="margin-bottom:4px;">Available Windows</div>
+      <div class="help-text" style="margin-top:0;">Every individual day on your loaded roster with no duty, layover, standby, or instruction — so you can tell at a glance whether a specific date is open for a private event. Standby counts as unavailable even if never activated, since you could still get called in.</div>
+      <div id="next-available-card" class="next-duty-card" style="border-color:var(--accent-cyan);">
+        <div class="next-duty-label" style="color:var(--accent-cyan);">Next Available Day</div>
+        <div class="next-duty-main" id="next-available-main">Loading…</div>
+        <div class="next-duty-sub" id="next-available-sub"></div>
+      </div>
+      <div id="availability-list"></div>
+    </section>
+
+    <section class="tab-panel" id="panel-ftl">
+      <div class="eyebrow" style="margin-bottom:4px;">FTL Limits <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(estimated from your loaded roster only)</span></div>
+      <div class="help-text" style="margin-top:0;">Not a substitute for your airline's official FTL system — this only sees whatever roster is currently loaded. If that roster doesn't fully cover a lookback window (e.g. you loaded this period only a few days ago), the numbers below are undercounted, not necessarily your real total.</div>
+
+      <div class="eyebrow" style="margin-top:16px; margin-bottom:4px;">Rolling Duty Time</div>
+      <div class="thresh-row"><span>Last 7 days</span><b id="ftl-duty7-label">0.00h</b></div>
+      <div class="thresh-bar"><div class="thresh-fill" id="ftl-duty7-fill" style="width:0%; background:var(--accent-cyan);"></div></div>
+      <div class="thresh-row"><span>Last 14 days</span><b id="ftl-duty14-label">0.00h</b></div>
+      <div class="thresh-bar"><div class="thresh-fill" id="ftl-duty14-fill" style="width:0%; background:var(--accent-cyan);"></div></div>
+      <div class="thresh-row"><span>Last 28 days</span><b id="ftl-duty28-label">0.00h</b></div>
+      <div class="thresh-bar"><div class="thresh-fill" id="ftl-duty28-fill" style="width:0%; background:var(--accent-cyan);"></div></div>
+
+      <div class="eyebrow" style="margin-top:16px; margin-bottom:4px;">Rolling Flight Time (Block Hours)</div>
+      <div class="thresh-row"><span>This calendar month</span><b id="ftl-fh-month-label">0.00h</b></div>
+      <div class="thresh-bar"><div class="thresh-fill" id="ftl-fh-month-fill" style="width:0%; background:var(--accent-amber);"></div></div>
+      <div class="thresh-row"><span>Last 3 months</span><b id="ftl-fh-3mo-label">0.00h</b></div>
+      <div class="thresh-bar"><div class="thresh-fill" id="ftl-fh-3mo-fill" style="width:0%; background:var(--accent-amber);"></div></div>
+      <div class="thresh-row"><span>Last 12 months</span><b id="ftl-fh-12mo-label">0.00h</b></div>
+      <div class="thresh-bar"><div class="thresh-fill" id="ftl-fh-12mo-fill" style="width:0%; background:var(--accent-amber);"></div></div>
+
+      <div class="eyebrow" style="margin-top:16px; margin-bottom:8px;">Your Limits <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(optional — enter your real regulatory caps to see % used instead of just raw hours)</span></div>
+      <div class="field-group"><label>7-day duty cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-duty7" step="1" placeholder="e.g. 60"></div></div>
+      <div class="field-group"><label>14-day duty cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-duty14" step="1" placeholder="e.g. 110"></div></div>
+      <div class="field-group"><label>28-day duty cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-duty28" step="1" placeholder="e.g. 190"></div></div>
+      <div class="field-group"><label>Monthly flight-hour cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-month" step="1" placeholder="e.g. 100"></div></div>
+      <div class="field-group"><label>3-month flight-hour cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-3mo" step="1" placeholder="e.g. 270"></div></div>
+      <div class="field-group"><label>12-month flight-hour cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-12mo" step="1" placeholder="e.g. 900"></div></div>
+    </section>
+
+    <section class="tab-panel" id="panel-whatif">
+      <div class="eyebrow" style="margin-bottom:4px;">What If</div>
+      <div class="help-text" style="margin-top:0;">See exactly what a new flight would do to your predicted salary before you accept it. Uses the same engine as the rest of the app, so the numbers match everywhere else. If you already had a flight scheduled that date, this replaces it — it doesn't add on top.</div>
+
+      <div class="field-group"><label>Date (DD/MM)</label><div class="input-wrap"><input type="text" id="wi-date" placeholder="19/09"></div></div>
+      <div class="field-group"><label>Report (local, HH:MM)</label><div class="input-wrap"><input type="text" id="wi-report" placeholder="05:00"></div></div>
+      <div class="field-group"><label>Debrief (local, HH:MM)</label><div class="input-wrap"><input type="text" id="wi-debrief" placeholder="11:30"></div></div>
+      <div class="field-group"><label>New destination</label><div class="input-wrap"><input type="text" id="wi-dest" placeholder="ATH" oninput="this.value=this.value.toUpperCase(); autofillWhatIfBlock();"></div></div>
+      <div class="field-group"><label>Total block hours (round trip)</label><div class="input-wrap"><input type="number" id="wi-block" step="0.05" placeholder="4.0"></div></div>
+
+      <div class="field-group">
+        <label>How is this flight being offered?</label>
+        <div class="input-wrap">
+          <select id="wi-offer-type" style="width:100%; background:transparent; border:none; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:13px; padding:10px 0;">
+            <option value="crew">Crew assignment (new call-out)</option>
+            <option value="swap">Swap suggested by a colleague</option>
+          </select>
+        </div>
+      </div>
+      <div class="help-text" style="margin-top:0;">Crew assignment counts as an unscheduled flight (1.5x incentive, or 2x if it also touches the Shabbat window). A swap doesn't — you were always going to be working that day, just with someone else, so it doesn't earn the "unscheduled" bonus.</div>
+
+      <button class="load-btn" onclick="computeWhatIf()">Calculate What-If</button>
+      <div id="wi-result" style="margin-top:16px;"></div>
+    </section>
+
+    <section class="tab-panel" id="panel-annual">
+      <div class="eyebrow" style="margin-bottom:4px;">Annual Cumulative <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(from "מצטבר שנתי")</span></div>
+      <div class="field-group">
+        <label>Duty/assignment days (year)</label>
+        <div class="input-wrap"><input type="number" id="ann-dutydays" step="1" placeholder="0"></div>
+      </div>
+      <div class="help-text" style="margin-top:0;">Saved on this device only — re-enter if you switch phones or clear browser data.</div>
+    </section>
+  </main>
+
+  <div class="crew-modal-overlay" id="crew-modal-overlay" onclick="if(event.target===this) closeCrewModal()">
+    <div class="crew-modal" id="crew-modal-body"></div>
+  </div>
+
+  <div class="crew-modal-overlay" id="incentive-modal-overlay" onclick="if(event.target===this) closeIncentiveModal()">
+    <div class="crew-modal" id="incentive-modal-body"></div>
+  </div>
+
+  <div class="drawer-overlay" id="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
+    <div class="drawer-panel">
+      <div class="drawer-title"><span>Menu</span><span style="cursor:pointer; color:var(--text-muted); padding:4px;" onclick="closeDrawer()">✕</span></div>
+      <div class="drawer-item" onclick="switchTab('settings'); closeDrawer();">⚙️ Settings</div>
+      <div class="drawer-item" onclick="switchTab('swap'); closeDrawer();">🔄 Swap Requests</div>
+      <div class="drawer-item" onclick="switchTab('availability'); closeDrawer();">🟢 Available Windows</div>
+      <div class="drawer-item" onclick="switchTab('ftl'); closeDrawer();">📊 FTL Limits</div>
+      <div class="drawer-item" onclick="switchTab('whatif'); closeDrawer();">🔮 What If</div>
+      <div class="drawer-item" onclick="switchTab('annual'); closeDrawer();">📅 Annual Cumulative</div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <nav class="tabs">
+    <button class="tab-btn active" data-tab="roster" onclick="switchTab('roster')">
+      <svg viewBox="0 0 24 24"><path d="M4 19h16M6 15h12M8 11h8M10 7h4"/></svg>Roster
+    </button>
+    <button class="tab-btn" data-tab="salary" onclick="switchTab('salary')">
+      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Salary
+    </button>
+    <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">
+      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar
+    </button>
+    <button class="tab-btn" data-tab="share" onclick="switchTab('share')">
+      <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.8l7.4-3.6M8.3 13.2l7.4 3.6"/></svg>Share
+    </button>
+  </nav>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+  if(typeof pdfjsLib !== 'undefined'){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  const titles = {roster:'Roster', salary:'Salary Predictor', calendar:'Roster Calendar', share:'Share Roster', settings:'Settings', swap:'Swap Requests', availability:'Available Windows', ftl:'FTL Limits', whatif:'What If', annual:'Annual Cumulative'};
+  const TAB_ORDER = ['roster', 'salary', 'calendar', 'share'];
+  function switchTab(name){
+    document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+    document.getElementById('panel-'+name).classList.add('active');
+    const btn = document.querySelector('.tab-btn[data-tab="'+name+'"]');
+    if(btn) btn.classList.add('active');
+    document.getElementById('header-title').textContent = titles[name];
+  }
+
+  function openDrawer(){ document.getElementById('drawer-overlay').classList.add('open'); }
+  function closeDrawer(){ document.getElementById('drawer-overlay').classList.remove('open'); }
+
+  // ---- Swipe between tabs ----
+  (function initSwipe(){
+    const main = document.getElementById('main-content');
+    let startX = 0, startY = 0, tracking = false;
+    main.addEventListener('touchstart', e => {
+      startX = e.touches[0].clientX;
+      startY = e.touches[0].clientY;
+      tracking = true;
+    }, {passive: true});
+    main.addEventListener('touchend', e => {
+      if(!tracking) return;
+      tracking = false;
+      const dx = e.changedTouches[0].clientX - startX;
+      const dy = e.changedTouches[0].clientY - startY;
+      if(Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return; // not a clean horizontal swipe
+      const activeBtn = document.querySelector('.tab-btn.active');
+      const currentName = activeBtn ? activeBtn.getAttribute('data-tab') : 'roster';
+      const idx = TAB_ORDER.indexOf(currentName);
+      if(idx === -1) return;
+      const nextIdx = dx < 0 ? idx + 1 : idx - 1; // swipe left -> next tab, swipe right -> previous
+      if(nextIdx < 0 || nextIdx >= TAB_ORDER.length) return;
+      switchTab(TAB_ORDER[nextIdx]);
+    }, {passive: true});
+  })();
+
+  function requestTrip(btn, label){
+    btn.textContent = 'Request Sent ✓';
+    btn.classList.add('sent');
+    showToast('Requested ' + label);
+  }
+  function showToast(msg){
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    setTimeout(()=>t.classList.remove('show'), 2200);
+  }
+  async function shareRoster(){
+    const text = "My upcoming trips:\\nAug 30 - Sep 2: Tel Aviv -> New York (2 nights)\\nSep 11-13: Tel Aviv -> Budapest (2 nights)\\nSep 15-17: Tel Aviv -> New York (1 night)\\nHome: Aug 21, 23-24, and other non-trip days";
+    if(navigator.share){
+      try{ await navigator.share({title:'My Roster', text}); } catch(e){}
+    } else {
+      try{ await navigator.clipboard.writeText(text); showToast('Copied to clipboard'); }
+      catch(e){ showToast('Copy failed — select text manually'); }
+    }
+  }
+
+  function shiftTimeStr(hm, minutesOffset){
+    if(!hm) return hm;
+    const [h, m] = hm.split(':').map(Number);
+    if(isNaN(h) || isNaN(m)) return hm;
+    let total = ((h * 60 + m) + minutesOffset) % 1440;
+    if(total < 0) total += 1440;
+    return String(Math.floor(total / 60)).padStart(2, '0') + ':' + String(total % 60).padStart(2, '0');
+  }
+
+  function generateFamilyImage(){
+    const days = buildCalendarDays(); // reuses the same grouping logic as the Calendar tab
+    // Group into months, same shape the Calendar tab uses, but we need each month's own
+    // leading-blank count and row count to lay out the canvas grid ahead of drawing.
+    // Position is computed from each item's own day-of-month, not by sequentially counting
+    // items — a gap in the loaded roster (a day with no entry at all) would otherwise silently
+    // shift every following day one column left of its true weekday.
+    const months = [];
+    let cur = null;
+    days.forEach(item => {
+      const mm = item.date.split('/')[1];
+      const dayNum = parseInt(item.date.split('/')[0], 10);
+      if(!cur || cur.mm !== mm){
+        const dObj = buildDateObj(item.date, '12:00');
+        cur = {mm, items: [], firstDayNum: dayNum, leadIdx: dObj ? dObj.getDay() : WEEK.indexOf(item.day)};
+        months.push(cur);
+      }
+      cur.items.push({item, pos: cur.leadIdx + (dayNum - cur.firstDayNum)});
+    });
+
+    const cellW = 108, cellH = 88, cols = 7, marginX = 24, topMargin = 60, monthLabelH = 34, weekdayH = 24, monthGap = 22;
+    const driveEl = document.getElementById('drive-time-minutes');
+    const driveMinutes = driveEl ? (parseFloat(driveEl.value) || 0) : 0;
+    const width = marginX * 2 + cols * cellW;
+    let height = topMargin;
+    months.forEach(mo => {
+      const lastPos = mo.items.length ? mo.items[mo.items.length - 1].pos : mo.leadIdx;
+      const rows = Math.ceil((lastPos + 1) / cols);
+      mo.rows = rows;
+      height += monthLabelH + weekdayH + rows * cellH + monthGap;
+    });
+
+    const canvas = document.createElement('canvas');
+    canvas.width = width; canvas.height = height;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff'; ctx.fillRect(0, 0, width, height);
+
+    ctx.fillStyle = '#0a1628';
+    ctx.font = '600 22px "Space Grotesk", sans-serif';
+    ctx.fillText('Flight Schedule', marginX, 34);
+    ctx.font = '400 12px "IBM Plex Mono", monospace';
+    ctx.fillStyle = '#667';
+    ctx.fillText('Report / Debrief times — everything else is just Home or Away', marginX, 52);
+
+    let y = topMargin;
+    months.forEach(mo => {
+      ctx.fillStyle = '#0a1628';
+      ctx.font = '600 16px "Space Grotesk", sans-serif';
+      ctx.fillText(MONTH_NAMES[mo.mm] || mo.mm, marginX, y + 22);
+      y += monthLabelH;
+
+      ctx.font = '600 10px "IBM Plex Mono", monospace';
+      ctx.fillStyle = '#889';
+      WEEK.forEach((w, c) => {
+        ctx.fillText(w.slice(0,3), marginX + c * cellW + 8, y + 16);
+      });
+      y += weekdayH;
+
+      mo.items.forEach(({item, pos}) => {
+        const col = pos % cols, row = Math.floor(pos / cols);
+        const x = marginX + col * cellW;
+        const cy = y + row * cellH;
+        let bg = '#f4f6f8', border = '#dde3e8';
+        if(item.code === 'DUTY'){ bg = '#e3f0fc'; border = '#a9cdec'; }
+        else if(item.code === 'LAYOVER'){ bg = '#fdedd6'; border = '#f0c98a'; }
+        ctx.fillStyle = bg; ctx.fillRect(x + 2, cy + 2, cellW - 4, cellH - 4);
+        ctx.strokeStyle = border; ctx.lineWidth = 1; ctx.strokeRect(x + 2, cy + 2, cellW - 4, cellH - 4);
+
+        ctx.fillStyle = '#0a1628';
+        ctx.font = '600 13px "IBM Plex Mono", monospace';
+        ctx.fillText(item.date.split('/')[0], x + 8, cy + 18);
+
+        ctx.font = '400 10.5px "IBM Plex Sans", sans-serif';
+        if(item.code === 'DUTY'){
+          ctx.fillStyle = '#1a5a9e';
+          const leaveHome = driveMinutes ? shiftTimeStr(item.report, -driveMinutes) : item.report;
+          const backHome = driveMinutes ? shiftTimeStr(item.debrief, driveMinutes) : item.debrief;
+          ctx.fillText((driveMinutes ? 'Leave ' : 'Rep ') + leaveHome, x + 8, cy + 36);
+          ctx.fillText((driveMinutes ? 'Home ' : 'Deb ') + backHome, x + 8, cy + 50);
+          if(item.dests && item.dests.length){
+            ctx.font = '600 10px "IBM Plex Sans", sans-serif';
+            ctx.fillText(item.dests.map(d => getFlag(d) + ' ' + d).join(' '), x + 8, cy + 66);
+            ctx.font = '400 10.5px "IBM Plex Sans", sans-serif';
+          }
+        } else if(item.code === 'LAYOVER'){
+          ctx.fillStyle = '#a06a1a';
+          ctx.fillText('Away', x + 8, cy + 36);
+          if(item.dests[0]) ctx.fillText(item.dests[0], x + 8, cy + 50);
+        } else {
+          ctx.fillStyle = '#8a929a';
+          ctx.fillText('Home', x + 8, cy + 36);
+        }
+      });
+      y += mo.rows * cellH + monthGap;
+    });
+
+    const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
+    const container = document.getElementById('family-image-container');
+    container.innerHTML = `<img id="family-image-el" src="${dataUrl}" style="width:100%; border-radius:10px; border:1px solid var(--divider);">
+      <button class="load-btn" id="family-save-btn" style="margin-top:8px;" onclick="saveFamilyImage()">Save / Share Image</button>
+      <div class="help-text" style="margin-top:8px;">If the button doesn't open a save option, press and hold the image above and choose "Save Image" — that always works.</div>`;
+
+    canvas.toBlob(blob => { window._familyImageBlob = blob; }, 'image/jpeg', 0.92);
+  }
+
+  async function saveFamilyImage(){
+    const blob = window._familyImageBlob;
+    if(!blob){ showToast('Image not ready yet — try again in a second'); return; }
+    const file = new File([blob], 'family-calendar.jpg', {type: 'image/jpeg'});
+    if(navigator.canShare && navigator.canShare({files: [file]})){
+      try{ await navigator.share({files: [file], title: 'Flight Schedule'}); return; }
+      catch(e){ /* user cancelled or share failed — fall through to download link */ }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url; a.download = 'family-calendar.jpg';
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 10000);
+  }
+
+  // ---- Real roster data (parsed from uploaded Schedule Report) ----
+  const rosterData = [
+    {date:'21/08', day:'FRI', code:'OFFP', label:'Paid day off — Airbus'},
+    {date:'22/08', day:'SAT', code:'OFF', label:'Day off'},
+    {date:'23/08', day:'SUN', code:'OFFP', label:'Paid day off — Airbus'},
+    {date:'24/08', day:'MON', code:'OFFP', label:'Paid day off — Airbus'},
+    {date:'25/08', day:'TUE', code:'DUTY', report:'04:50', debrief:'11:45',
+      legs:[{flt:'889',ac:'320',from:'TLV',to:'BUS',time:'06:00 – 08:15',block:2.25},{flt:'890',ac:'320',from:'BUS',to:'TLV',time:'09:15 – 11:45',block:2.5}]},
+    {date:'26/08', day:'WED', code:'PM', label:'Request evening off'},
+    {date:'26/08', day:'WED', code:'DUTY', report:'04:10', debrief:'12:05',
+      legs:[{flt:'173',ac:'320',from:'TLV',to:'TIV',time:'05:20 – 08:20',block:3.0},{flt:'174',ac:'320',from:'TIV',to:'TLV',time:'09:20 – 12:05',block:2.75}]},
+    {date:'27/08', day:'THU', code:'DUTY', report:'09:40', debrief:'20:20', flatCredit:8,
+      legs:[{flt:'591',ac:'320',from:'TLV',to:'PFO',time:'10:50 – 12:00',block:1.1667},{flt:'592',ac:'320',from:'PFO',to:'TLV',time:'13:00 – 14:00',block:1.0},{flt:'565',ac:'320',from:'TLV',to:'ATH',time:'15:05 – 17:20',block:2.25},{flt:'566',ac:'320',from:'ATH',to:'TLV',time:'18:20 – 20:20',block:2.0}]},
+    {date:'30/08', day:'SUN', code:'DUTY', report:'20:00', debrief:'10:10⁺¹',
+      legs:[{flt:'971',ac:'332',from:'TLV',to:'JFK',time:'21:30 – 09:40⁺¹',block:12.1667}]},
+    {date:'31/08', day:'MON', code:'LAYOVER', label:'Layover — New York (JFK)'},
+    {date:'01/09', day:'TUE', code:'LAYOVER', label:'Layover — New York (JFK)'},
+    {date:'02/09', day:'WED', code:'DUTY', report:'17:00', debrief:'06:15⁺¹',
+      legs:[{flt:'972',ac:'332',from:'JFK',to:'TLV',time:'18:30 – 05:45⁺¹',block:11.25}]},
+    {date:'06/09', day:'SUN', code:'INS', label:'Instruction (ground)', standby:'06:00 – 13:00'},
+    {date:'07/09', day:'MON', code:'PM', label:'Request evening off'},
+    {date:'09/09', day:'WED', code:'DUTY', report:'01:00', debrief:'09:40',
+      legs:[{flt:'881',ac:'320',from:'TLV',to:'GYD',time:'02:10 – 05:15',block:3.0833},{flt:'882',ac:'320',from:'GYD',to:'TLV',time:'06:15 – 09:40',block:3.4167}]},
+    {date:'11/09', day:'FRI', code:'DUTY', report:'10:05', debrief:'14:45',
+      legs:[{flt:'723',ac:'320',from:'TLV',to:'BUD',time:'11:15 – 14:45',block:3.5}]},
+    {date:'12/09', day:'SAT', code:'LAYOVER', label:'Layover — Budapest (BUD)'},
+    {date:'13/09', day:'SUN', code:'DUTY', report:'18:50', debrief:'23:10',
+      legs:[{flt:'724',ac:'320',from:'BUD',to:'TLV',time:'20:00 – 23:10',block:3.1667}]},
+    {date:'15/09', day:'TUE', code:'DUTY', report:'20:00', debrief:'10:10⁺¹',
+      legs:[{flt:'971',ac:'332',from:'TLV',to:'JFK',time:'21:30 – 09:40⁺¹',block:12.1667}]},
+    {date:'16/09', day:'WED', code:'LAYOVER', label:'Layover — New York (JFK)'},
+    {date:'17/09', day:'THU', code:'DUTY', report:'17:00', debrief:'06:15⁺¹',
+      legs:[{flt:'972',ac:'332',from:'JFK',to:'TLV',time:'18:30 – 05:45⁺¹',block:11.25}]},
+    {date:'19/09', day:'SAT', code:'DUTY', report:'16:30', debrief:'20:25',
+      legs:[{flt:'47',ac:'320',from:'TLV',to:'ETM',time:'14:30 – 15:30',block:1.0},{flt:'48',ac:'320',from:'ETM',to:'TLV',time:'16:30 – 17:25',block:0.9167}]}
+  ];
+
+  // ---- Shabbat window auto-detection ----
+  // Assumes leg/report times are UTC (Israel local = UTC+3). A leg is flagged if either:
+  // (a) its landing (arrival) falls on Friday after 19:00 Israel time, or
+  // (b) its duty's report time falls on Saturday before 19:00 Israel time.
+  const WEEK = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+  const HOME = 'TLV';
+  const EXCLUDED = ['ETH', 'ETM']; // per-diem-excluded destinations (edit for your own airports)
+  const EILAT_CODE = 'ETM';
+  const HOLIDAY_DATES = ['11/09', '13/09']; // Rosh Hashana eve/day, 2026 — flat 2x block hours. Update yearly (Hebrew calendar date shifts).
+  const DUTY_CODE_MAP = {ROFF:'Requested Day Off', CXL:'Canceled flight', OFF:'Day off', OFFP:'Paid day off', SBSM:'Standby — short morning', SBSE:'Standby — short evening', INS:'Instruction (ground)', PM:'Request evening off', MEMO:'Memo'};
+  const MONTHLY_BLOCK_THRESHOLD = 83; // raw block hours per month; each hour above this earns 1.5x (extra +0.5/hr bonus)
+  function dayOffset(dayAbbr, offset){
+    const idx = WEEK.indexOf(dayAbbr);
+    if(idx === -1) return dayAbbr;
+    return WEEK[(idx + offset + 7) % 7];
+  }
+  function toIsraelLocal(hhmm, dayAbbr){
+    const [h, m] = hhmm.split(':').map(Number);
+    let mins = h * 60 + m + 180; // UTC -> Israel (+3h)
+    let day = dayAbbr;
+    if(mins >= 1440){ mins -= 1440; day = dayOffset(day, 1); }
+    return {hour: mins / 60, day};
+  }
+  function legOverlapsShabbatWindow(d, l){
+    if(!l.time) return false;
+    const m = l.time.match(/(\d{2}:\d{2})\s*[–-]\s*(\d{2}:\d{2})(⁺¹|\+1)?/);
+    if(!m) return false;
+    const depRaw = m[1], arrRaw = m[2], plusOne = !!m[3];
+    const dep = toIsraelLocal(depRaw, d.day);
+    const arrDayAbbr = plusOne ? dayOffset(d.day, 1) : d.day;
+    const arr = toIsraelLocal(arrRaw, arrDayAbbr);
+
+    let legStart = WEEK.indexOf(dep.day) * 1440 + dep.hour * 60;
+    let legEnd = WEEK.indexOf(arr.day) * 1440 + arr.hour * 60;
+    if(legEnd < legStart) legEnd += 7 * 1440; // crossed week boundary
+
+    const windowStart = WEEK.indexOf('FRI') * 1440 + 19 * 60;
+    const windowEnd = WEEK.indexOf('SAT') * 1440 + 21 * 60; // Sat 21:00 Israel time
+    return legStart < windowEnd && legEnd > windowStart; // any overlap with Fri 19:00 - Sat 21:00
+  }
+  function isShabbatDay(d){
+    // If ANY leg that day touches the Shabbat window (Fri 19:00 - Sat 21:00 Israel time),
+    // the whole DUTY day's legs get the Shabbat incentive — not just the leg(s) that overlap.
+    if(!d.legs) return false;
+    return d.legs.some(l => legOverlapsShabbatWindow(d, l));
+  }
+
+  function activityBadge(idx){
+    if(idx == null) return '';
+    return ` <span class="badge-chip" style="background:#8B6FD9; border-color:#8B6FD9; color:#ffffff;" onclick="showToast('Activity day ${idx} this month — flight, layover, and instruction days count toward this; standby and paid days off don\\'t. Day 14+ earns the veteran incentive.')">${idx}</span>`;
+  }
+
+  function computeActivityDayIndices(days){
+    // Flight (DUTY), layover, and instruction days all count as an "activity day", in order.
+    // Standby and paid-off days do NOT count. From the 14th activity day onward, that day's
+    // block credit gets an extra 1.5x incentive.
+    days = days || rosterData;
+    const map = {};
+    let counter = 0;
+    days.forEach(d => {
+      if(d.code !== 'DUTY' && d.code !== 'LAYOVER' && d.code !== 'INS') return;
+      if(map[d.date] === undefined){ counter++; map[d.date] = counter; }
+    });
+    return map;
+  }
+
+  function computeSameDayDutyRank(days){
+    // If a calendar date has more than one separate DUTY entry (two distinct flight activities
+    // in one day, not just a multi-leg trip within one duty period), the 2nd+ entry's block
+    // hours get an extra 1.5x. Rank is 0 for the day's first DUTY entry, 1+ for later ones —
+    // keyed by the entry's index in the dataset passed in.
+    days = days || rosterData;
+    const rank = {};
+    const seen = {};
+    days.forEach((d, i) => {
+      if(d.code !== 'DUTY') return;
+      seen[d.date] = seen[d.date] === undefined ? 0 : seen[d.date] + 1;
+      rank[i] = seen[d.date];
+    });
+    return rank;
+  }
+
+  function parseHM(str){
+    const m = str && str.match(/(\d{2}:\d{2})(⁺¹|\+1)?/);
+    if(!m) return null;
+    const [h, mi] = m[1].split(':').map(Number);
+    return h * 60 + mi + (m[2] ? 1440 : 0);
+  }
+
+  function computeTripTimeHours(d){
+    // Trip time = (debrief - report) minus actual flown block hours = ground time during the duty.
+    if(!d.report || !d.debrief) return 0;
+    const repMin = parseHM(d.report);
+    let debMin = parseHM(d.debrief);
+    if(repMin == null || debMin == null) return 0;
+    if(debMin < repMin) debMin += 1440;
+    const dutySpanHours = (debMin - repMin) / 60;
+    let rawBlock = 0;
+    for(const l of d.legs){
+      if(l.block == null) return 0; // can't trust trip time if a leg's block is unknown
+      rawBlock += l.block;
+    }
+    return Math.max(0, dutySpanHours - rawBlock);
+  }
+
+  function splitIntoRoundTripSegments(legs){
+    // A "segment" is one round trip back to HOME. A leg sequence that never returns to HOME
+    // within the day (e.g. the outbound half of a multi-day layover pairing) is its own
+    // trailing one-leg segment.
+    const segments = [];
+    let current = [];
+    legs.forEach(l => {
+      current.push(l);
+      if(l.to === HOME){ segments.push(current); current = []; }
+    });
+    if(current.length) segments.push(current);
+    return segments;
+  }
+  function segmentMinimumHours(segment){
+    // Per the collective agreement: international duty (one-way leg, part of a layover
+    // pairing) = 5h; a same-day round trip ("סבב") of 2+ legs out of/into Ben Gurion = 4h;
+    // the Ben Gurion–Eilat–Ben Gurion round trip specifically = 3h.
+    if(segment.length === 1) return 5;
+    const eilatOnly = segment.every(l => (l.from === HOME || l.from === EILAT_CODE) && (l.to === HOME || l.to === EILAT_CODE))
+      && segment.some(l => l.from === EILAT_CODE || l.to === EILAT_CODE);
+    return eilatOnly ? 3 : 4;
+  }
+  function effectiveMinimumForDay(d){
+    // Multi-destination days (e.g. a PFO turn + an ATH turn in one duty period) are treated
+    // as multiple segments, each with its own minimum, summed — matching the contract's
+    // worked example of a combined Larnaca+Eilat day (4h + 3h).
+    if(!d.legs || d.legs.length === 0) return 0;
+    return splitIntoRoundTripSegments(d.legs).reduce((sum, seg) => sum + segmentMinimumHours(seg), 0);
+  }
+
+  let editMode = false;
+
+  // ---- Trip notes (persisted in this browser via localStorage) ----
+  function getTripNotesStore(){
+    try{ return JSON.parse(localStorage.getItem('crewboard-trip-notes') || '{}'); }
+    catch(e){ return {}; }
+  }
+  function getTripNote(date){ return getTripNotesStore()[date] || ''; }
+  function saveTripNote(date, value){
+    const store = getTripNotesStore();
+    if(value){ store[date] = value; } else { delete store[date]; }
+    try{ localStorage.setItem('crewboard-trip-notes', JSON.stringify(store)); }
+    catch(e){ showToast('Could not save note — storage unavailable'); }
+  }
+
+  function renderRoster(){
+    const el = document.getElementById('roster-list');
+    const dayIndex = computeActivityDayIndices();
+    const sameDayRank = computeSameDayDutyRank();
+    let html = '';
+    rosterData.forEach((d, i) => {
+      const hasNote = !!getTripNote(d.date);
+      html += `<div class="day-group"><div class="day-label"><span>${d.day} ${d.date}${hasNote ? ' <span class="note-dot" title="Has a note">●</span>' : ''}</span><span class="line"></span></div>`;
+      if(editMode){
+        html += `<div class="day-edit-controls">`;
+        if(d.code === 'DUTY') html += `<button class="day-edit-btn cancel" onclick="cancelFlight(${i})">Cancel flight (→ CXL, 3h)</button>`;
+        html += `<button class="day-edit-btn remove" onclick="removeEntry(${i})">Remove entirely</button>`;
+        html += `</div>`;
+      }
+      if(d.code === 'DUTY'){
+        const idx = dayIndex[d.date];
+        const veteranBadge = idx >= 14 ? ` <span class="badge-chip" style="border-color:var(--danger);color:var(--danger)" onclick="showToast('Day ${idx} of activity (14th+) — 1.5x incentive')">V</span>` : '';
+        const holidayBadge = HOLIDAY_DATES.includes(d.date) ? ` <span class="badge-chip" style="border-color:var(--accent-amber);color:var(--accent-amber)" onclick="showToast('Holiday date — flat 2x block credit')">H</span>` : '';
+        const secondActBadge = sameDayRank[i] >= 1 ? ` <span class="badge-chip" style="border-color:var(--accent-cyan);color:var(--accent-cyan)" onclick="showToast('2nd separate flight activity this calendar day — 1.5x')">2</span>` : '';
+        const dayShabbat = isShabbatDay(d);
+        const estimates = getRouteEstimates();
+        const resolvedLegs = d.legs.map(l => resolveLegBlock(l, estimates));
+        const knownLegs = resolvedLegs.filter(r => r.block != null);
+        const anyEstimated = knownLegs.some(r => r.estimated);
+        const dayTotalBlock = knownLegs.reduce((s, r) => s + r.block, 0);
+        const totalLabel = (knownLegs.length === d.legs.length ? dayTotalBlock.toFixed(2) + 'h' : (knownLegs.length ? dayTotalBlock.toFixed(2) + 'h+' : '—')) + (anyEstimated ? ' (est.)' : '');
+        html += `<div class="stub" style="animation-delay:${i*0.02}s">
+          <div class="stub-head"><span>Report <b>${d.report}</b></span><span>Debrief <b>${d.debrief}</b> · <b style="color:${anyEstimated ? 'var(--accent-amber)' : 'var(--accent-cyan)'}">${totalLabel}</b>${d.indicator ? ' <span class=\"badge\">'+d.indicator+'</span>' : ''}${activityBadge(idx)}${veteranBadge}${holidayBadge}${secondActBadge}<button class="crew-btn${d.crew && d.crew.length ? ' has-crew' : ''}" onclick="showCrewModal(${i})" title="Crew">👥</button></span></div>`;
+        d.legs.forEach((l, j) => {
+          const shabbat = dayShabbat;
+          const resolved = resolvedLegs[j];
+          const blockTag = resolved.block == null ? '' : (resolved.estimated
+            ? ` <span class=\"mono\" style=\"color:var(--accent-amber); font-size:10px;\">(~${resolved.block.toFixed(2)}h est.)</span>`
+            : ` <span class=\"mono\" style=\"color:var(--text-muted); font-size:10px;\">(${resolved.block.toFixed(2)}h)</span>`);
+          html += `<div class="leg-row">
+            <label class="unsched-wrap" title="Unscheduled (1.5x)">
+              <input type="checkbox" class="unsched-check" data-day="${i}" data-leg="${j}" ${l.unschedDefault ? 'checked' : ''} onchange="recalcSalary(); renderReconComparison();">
+              <span class="cbox"></span>
+            </label>
+            <span class="leg-flt">${l.flt} [${l.ac}]</span><span class="leg-route">${l.from} → ${l.to}</span><span class="leg-time">${l.time == null ? '<span class=\"mono\" style=\"color:var(--danger)\">no time</span>' : l.time}${blockTag}${shabbat ? ` <span class=\"badge-chip\" style=\"border-color:var(--accent-cyan);color:var(--accent-cyan)\" onclick=\"showToast('Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time) — whole day gets the incentive')\">S</span>` : ''}<button class="crew-btn" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times">🔍</button></span></div>`;
+        });
+        html += `<input type="text" class="trip-note-input" data-date="${d.date}" placeholder="Note for this trip (passport, uniform, etc.)" value="${(getTripNote(d.date) || '').replace(/"/g,'&quot;')}" onchange="saveTripNote('${d.date}', this.value)">`;
+        html += `</div>`;
+      } else if(d.code === 'CXL'){
+        html += `<div class="stub cxl"><span>${d.label}</span><span class="mono" style="font-size:11px">CXL · 3.00h credit</span></div>`;
+      } else if(d.code === 'SBSM' || d.code === 'SBSE'){
+        html += `<div class="stub standby" style="animation-delay:${i*0.02}s">
+          <div class="stub-head"><span>${d.label}</span></div>
+          <div class="standby-time">${d.standby}</div>
+        </div>`;
+      } else if(d.code === 'LAYOVER'){
+        html += `<div class="stub standby" style="animation-delay:${i*0.02}s">
+          <div class="stub-head"><span>${d.label}${activityBadge(dayIndex[d.date])}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
+        </div>`;
+      } else if(d.code === 'INS'){
+        html += `<div class="stub standby" style="animation-delay:${i*0.02}s; border-color:var(--text-muted);">
+          <div class="stub-head"><span>${d.label}${activityBadge(dayIndex[d.date])}</span><span class="mono" style="font-size:11px">3.00h credit</span></div>
+          <div class="standby-time" style="color:var(--text-muted);">${d.standby}</div>
+        </div>`;
+      } else if(d.code === 'PM' || d.code === 'MEMO'){
+        html += `<div class="stub off"><span>${d.label}</span><span class="mono" style="font-size:11px">${d.code}</span></div>`;
+      } else {
+        html += `<div class="stub off"><span>${d.label}</span><span class="mono" style="font-size:11px">${d.code}</span></div>`;
+      }
+      html += `</div>`;
+    });
+    el.innerHTML = html;
+  }
+  renderRoster();
+
+  // ---- Next Duty card ----
+  const ROSTER_YEAR = 2026; // update when you load a roster for a different year
+  function buildDateObj(dateStr, timeStr){
+    if(!dateStr || !timeStr) return null;
+    const [dd, mm] = dateStr.split('/').map(Number);
+    const [hh, mi] = timeStr.split(':').map(Number);
+    if([dd,mm,hh,mi].some(isNaN)) return null;
+    return new Date(ROSTER_YEAR, mm - 1, dd, hh, mi); // uses the device's local timezone
+  }
+  function renderNextDuty(){
+    const now = new Date();
+    const upcoming = rosterData
+      .filter(d => d.code === 'DUTY' && d.report)
+      .map(d => ({d, dt: buildDateObj(d.date, d.report)}))
+      .filter(x => x.dt && x.dt >= now)
+      .sort((a,b) => a.dt - b.dt);
+    const mainEl = document.getElementById('next-duty-main');
+    const subEl = document.getElementById('next-duty-sub');
+    if(upcoming.length === 0){
+      mainEl.textContent = 'No more duty in this roster';
+      subEl.textContent = 'Load your next roster period to keep this current';
+      return;
+    }
+    const next = upcoming[0];
+    const diffMs = next.dt - now;
+    const diffH = Math.floor(diffMs / 3600000);
+    const diffM = Math.round((diffMs % 3600000) / 60000);
+    const timeLabel = diffH >= 24 ? Math.floor(diffH/24) + 'd ' + (diffH%24) + 'h' : diffH + 'h ' + diffM + 'm';
+    const route = next.d.legs ? next.d.legs[0].from + next.d.legs.map(l => ' → ' + l.to).join('') : '';
+    mainEl.textContent = 'In ' + timeLabel;
+    subEl.textContent = next.d.day + ' ' + next.d.date + ' · Report ' + next.d.report + (route ? ' · ' + route : '');
+  }
+  renderNextDuty();
+  setInterval(renderNextDuty, 60000);
+
+  // ---- Available Windows: a flat list of individual free days (not merged ranges) — a crew
+  // member picking a day for a private event needs "is THIS day free", not a multi-day span.
+  const AVAILABLE_CODES = new Set(['OFF', 'OFFP', 'ROFF', 'CXL', 'PM', 'MEMO']);
+  function computeAvailableDays(){
+    return buildCalendarDays()
+      .filter(d => AVAILABLE_CODES.has(d.code))
+      .map(d => ({date: d.date, day: d.day, dateObj: buildDateObj(d.date, '00:00')}))
+      .filter(d => d.dateObj);
+  }
+  function renderAvailableWindows(){
+    const listEl = document.getElementById('availability-list');
+    const mainEl = document.getElementById('next-available-main');
+    const subEl = document.getElementById('next-available-sub');
+    if(!listEl || !mainEl) return;
+    const availableDays = computeAvailableDays();
+    const now = new Date();
+    const upcoming = availableDays.filter(d => d.dateObj >= now);
+    if(upcoming.length === 0){
+      mainEl.textContent = 'None found';
+      subEl.textContent = 'No free day left in this roster period';
+    } else {
+      const d = upcoming[0];
+      mainEl.textContent = d.day + ' ' + d.date;
+      subEl.textContent = 'Next open day for a private event';
+    }
+    if(availableDays.length === 0){
+      listEl.innerHTML = '<div class="help-text" style="margin-top:0;">No free days found in the loaded roster.</div>';
+      return;
+    }
+    listEl.innerHTML = availableDays.map(d => {
+      const isPast = d.dateObj < now;
+      return `<div class="avail-window${isPast ? ' past' : ''}"><span class="avail-window-dates">${d.day} ${d.date}</span></div>`;
+    }).join('');
+  }
+  renderAvailableWindows();
+
+  // ---- FTL Limits: rolling duty/flight time windows, estimated from the loaded roster only ----
+  function computeDutySpanHours(d){
+    if(!d.report || !d.debrief) return 0;
+    const repMin = parseHM(d.report);
+    let debMin = parseHM(d.debrief);
+    if(repMin == null || debMin == null) return 0;
+    if(debMin < repMin) debMin += 1440;
+    return (debMin - repMin) / 60;
+  }
+  function computeRollingDutyHours(daysBack){
+    const now = new Date();
+    const windowStart = new Date(now.getTime() - daysBack * 86400000);
+    let total = 0;
+    rosterData.forEach(d => {
+      if(d.code !== 'DUTY') return;
+      const dObj = buildDateObj(d.date, '12:00');
+      if(dObj && dObj >= windowStart && dObj <= now) total += computeDutySpanHours(d);
+    });
+    return total;
+  }
+  function computeRollingFlightHours(monthsBack, calendarMonthOnly){
+    const now = new Date();
+    const windowStart = calendarMonthOnly ? new Date(now.getFullYear(), now.getMonth(), 1) : new Date(now.getFullYear(), now.getMonth() - monthsBack, now.getDate());
+    let total = 0;
+    rosterData.forEach(d => {
+      if(d.code !== 'DUTY' || !d.legs) return;
+      const dObj = buildDateObj(d.date, '12:00');
+      if(dObj && dObj >= windowStart && dObj <= now) d.legs.forEach(l => { if(l.block != null) total += l.block; });
+    });
+    return total;
+  }
+  function renderFTL(){
+    const setGauge = (labelId, fillId, value, capId) => {
+      const labelEl = document.getElementById(labelId), fillEl = document.getElementById(fillId);
+      if(!labelEl || !fillEl) return;
+      const capEl = document.getElementById(capId);
+      const cap = capEl ? parseFloat(capEl.value) : NaN;
+      if(cap > 0){
+        labelEl.textContent = value.toFixed(2) + 'h / ' + cap + 'h';
+        fillEl.style.width = Math.min(100, (value / cap) * 100) + '%';
+        fillEl.style.background = value > cap ? 'var(--danger)' : (value > cap * 0.85 ? 'var(--accent-amber)' : 'var(--accent-cyan)');
+      } else {
+        labelEl.textContent = value.toFixed(2) + 'h';
+        fillEl.style.width = '0%'; // no known cap — just show the raw hours, no bar to compare against
+        fillEl.style.background = 'var(--text-muted)';
+      }
+    };
+    setGauge('ftl-duty7-label', 'ftl-duty7-fill', computeRollingDutyHours(7), 'ftl-cap-duty7');
+    setGauge('ftl-duty14-label', 'ftl-duty14-fill', computeRollingDutyHours(14), 'ftl-cap-duty14');
+    setGauge('ftl-duty28-label', 'ftl-duty28-fill', computeRollingDutyHours(28), 'ftl-cap-duty28');
+    setGauge('ftl-fh-month-label', 'ftl-fh-month-fill', computeRollingFlightHours(0, true), 'ftl-cap-month');
+    setGauge('ftl-fh-3mo-label', 'ftl-fh-3mo-fill', computeRollingFlightHours(3, false), 'ftl-cap-3mo');
+    setGauge('ftl-fh-12mo-label', 'ftl-fh-12mo-fill', computeRollingFlightHours(12, false), 'ftl-cap-12mo');
+  }
+  renderFTL();
+
+  // ---- Calendar tab ----
+  const AIRPORT_FLAG = {
+    TLV:'🇮🇱', ETM:'🇮🇱', ETH:'🇮🇱',
+    BUS:'🇬🇪', TIV:'🇲🇪', PFO:'🇨🇾', ATH:'🇬🇷',
+    JFK:'🇺🇸', GYD:'🇦🇿', BUD:'🇭🇺'
+    // TEMPLATE: add any other destination codes you fly to, e.g. XXX:'🏳️'
+  };
+  const AIRPORT_UTC_OFFSET = {
+    // Current UTC offset in hours (summer/DST as applicable), for converting a Local Station
+    // export's times to UTC so block hours can be computed same as a UTC export. Static and
+    // approximate — doesn't auto-switch for winter clock changes, only covers airports already
+    // seen here. Add more as needed, e.g. LHR: 1.
+    TLV: 3, ETM: 3, ETH: 3,
+    BUS: 4, TIV: 2, PFO: 3, ATH: 3,
+    JFK: -4, GYD: 4, BUD: 2
+  };
+  function getFlag(code){ return AIRPORT_FLAG[code] || '🏳️'; }
+  function extractDestCode(label){
+    const m = label && label.match(/\(([A-Z]{3})\)/);
+    return m ? m[1] : null;
+  }
+  const MONTH_NAMES = {'01':'January','02':'February','03':'March','04':'April','05':'May','06':'June','07':'July','08':'August','09':'September','10':'October','11':'November','12':'December'};
+
+  function buildCalendarDays(){
+    // Multiple roster rows can share a date (e.g. a PM note plus a DUTY row); pick the most
+    // substantive one per date for the calendar cell.
+    const priority = ['DUTY','LAYOVER','INS','SBSM','SBSE','OFFP','ROFF','OFF','PM','MEMO','CXL'];
+    const byDate = {};
+    const order = [];
+    rosterData.forEach(d => {
+      if(!byDate[d.date]){ byDate[d.date] = []; order.push(d.date); }
+      byDate[d.date].push(d);
+    });
+    return order.map(date => {
+      const entries = byDate[date].slice().sort((a,b) => priority.indexOf(a.code) - priority.indexOf(b.code));
+      const chosen = entries[0];
+      let dests = [];
+      if(chosen.code === 'DUTY' && chosen.legs){
+        const seen = new Set();
+        chosen.legs.forEach(l => { if(l.to && l.to !== HOME && !seen.has(l.to)){ seen.add(l.to); dests.push(l.to); } });
+      } else if(chosen.code === 'LAYOVER'){
+        const c = extractDestCode(chosen.label);
+        if(c) dests.push(c);
+      }
+      return {date, day:chosen.day, code:chosen.code, dests, report:chosen.report, debrief:chosen.debrief};
+    });
+  }
+
+  function renderCalendar(){
+    const el = document.getElementById('calendar-body');
+    const days = buildCalendarDays();
+    let html = '';
+    let currentMonth = null;
+    let prevDayNum = null;
+    days.forEach(item => {
+      const [dayNumStr, mm] = item.date.split('/');
+      const dayNum = parseInt(dayNumStr, 10);
+      if(mm !== currentMonth){
+        if(currentMonth !== null) html += '</div>';
+        currentMonth = mm;
+        html += `<div class="cal-month-label">${MONTH_NAMES[mm] || mm}</div><div class="cal-grid">`;
+        WEEK.forEach(w => html += `<div class="cal-weekday">${w.slice(0,3)}</div>`);
+        const dObj = buildDateObj(item.date, '12:00');
+        const leadIdx = dObj ? dObj.getDay() : WEEK.indexOf(item.day);
+        for(let i = 0; i < leadIdx; i++) html += `<div class="cal-cell empty"></div>`;
+      } else {
+        // A gap in the loaded roster (a day with no entry at all) would otherwise silently
+        // shift every following day one column left of its true weekday — fill it with blank
+        // cells instead so this date's real day-of-month distance is preserved on the grid.
+        for(let g = prevDayNum + 1; g < dayNum; g++) html += `<div class="cal-cell empty"></div>`;
+      }
+      prevDayNum = dayNum;
+      let cls = 'cal-cell';
+      let destHtml = '';
+      if(item.code === 'DUTY'){
+        cls += ' duty';
+        destHtml = item.dests.map(c => `<span class="cal-dest">${getFlag(c)} ${c}</span>`).join('');
+      } else if(item.code === 'LAYOVER'){
+        cls += ' layover';
+        destHtml = item.dests.map(c => `<span class="cal-dest">${getFlag(c)} ${c}</span>`).join('') || `<span class="cal-dest" style="color:var(--accent-cyan)">STAY</span>`;
+      } else if(item.code === 'INS'){
+        cls += ' ins';
+        destHtml = `<span class="cal-dest" style="color:var(--text-muted)">INS</span>`;
+      } else if(item.code === 'SBSM' || item.code === 'SBSE'){
+        cls += ' standby';
+        destHtml = `<span class="cal-dest" style="color:var(--accent-cyan)">SBY</span>`;
+      } else if(item.code === 'OFF' || item.code === 'OFFP' || item.code === 'ROFF'){
+        cls += ' off';
+        const lbl = item.code === 'OFFP' ? 'OFF·P' : (item.code === 'ROFF' ? 'R.OFF' : 'OFF');
+        destHtml = `<span class="cal-dest" style="color:var(--text-muted)">${lbl}</span>`;
+      } else {
+        cls += ' off';
+      }
+      html += `<div class="${cls}"><span class="cal-date">${dayNumStr}</span>${destHtml}</div>`;
+    });
+    if(currentMonth !== null) html += '</div>';
+    html += `<div class="cal-legend">
+      <span class="cal-legend-item"><i class="cal-dot" style="background:var(--accent-amber)"></i>Duty</span>
+      <span class="cal-legend-item"><i class="cal-dot" style="background:var(--accent-cyan)"></i>Layover</span>
+      <span class="cal-legend-item"><i class="cal-dot" style="background:var(--text-muted)"></i>Instruction / standby</span>
+      <span class="cal-legend-item"><i class="cal-dot" style="border:1px dashed var(--divider); background:transparent"></i>Off</span>
+    </div>`;
+    el.innerHTML = html;
+  }
+  renderCalendar();
+
+  // ---- Edit Mode: cancel / remove / add flight ----
+  // ---- Theme toggle (light/dark), persisted ----
+  function applyTheme(theme){
+    if(theme === 'light'){
+      document.documentElement.setAttribute('data-theme', 'light');
+      document.getElementById('theme-toggle-btn').textContent = '🌙 Dark';
+    } else {
+      document.documentElement.removeAttribute('data-theme');
+      document.getElementById('theme-toggle-btn').textContent = '☀️ Light';
+    }
+  }
+  function toggleTheme(){
+    const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
+    const next = current === 'light' ? 'dark' : 'light';
+    applyTheme(next);
+    try{ localStorage.setItem('crewboard-theme', next); } catch(e){}
+  }
+  (function initTheme(){
+    let saved = 'dark';
+    try{ saved = localStorage.getItem('crewboard-theme') || 'dark'; } catch(e){}
+    applyTheme(saved);
+  })();
+
+  // ---- Collapsible Salary sections ----
+  function getCollapseState(){
+    try{ return JSON.parse(localStorage.getItem('crewboard-collapse') || '{}'); } catch(e){ return {}; }
+  }
+  function toggleCollapse(headerEl){
+    const section = headerEl.parentElement;
+    const id = section.getAttribute('data-collapse-id');
+    const collapsed = section.classList.toggle('collapsed');
+    const state = getCollapseState();
+    state[id] = collapsed;
+    try{ localStorage.setItem('crewboard-collapse', JSON.stringify(state)); } catch(e){}
+  }
+  (function initCollapseState(){
+    const state = getCollapseState();
+    const DEFAULT_COLLAPSED = {nfa:false, ground:true, rates:true, reconcile:true, annual:true};
+    document.querySelectorAll('.collapse-section').forEach(sec => {
+      const id = sec.getAttribute('data-collapse-id');
+      const collapsed = state[id] !== undefined ? state[id] : DEFAULT_COLLAPSED[id];
+      if(collapsed) sec.classList.add('collapsed');
+    });
+  })();
+
+  // ---- Crew popup (tap the 👥 button on a flight) ----
+  function showCrewModal(i){
+    const d = rosterData[i];
+    if(!d) return;
+    const overlay = document.getElementById('crew-modal-overlay');
+    const body = document.getElementById('crew-modal-body');
+    const crew = d.crew || [];
+    let html = `<div class="crew-modal-title"><span>Crew — ${d.day} ${d.date}</span><span style="cursor:pointer; color:var(--text-muted); padding:4px;" onclick="closeCrewModal()">✕</span></div>`;
+    if(editMode){
+      const text = crew.map(c => c.name + (c.position ? ' - ' + c.position : '')).join('\n');
+      html += `<textarea id="crew-edit-text" rows="6" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Sans', sans-serif; font-size:13px;" placeholder="One per line: Name - Position">${text}</textarea>
+        <div class="help-text" style="margin-top:6px;">One crew member per line, e.g. "O.RONEN, OMER - CP". Paste straight from eCrew's flight details panel.</div>
+        <button class="load-btn" style="margin-top:8px;" onclick="saveCrewForDay(${i})">Save Crew</button>`;
+    } else if(crew.length === 0){
+      html += `<div class="help-text" style="margin-top:0;">No crew added for this flight yet. Turn on Edit Mode (Roster tab) to add it.</div>`;
+    } else {
+      html += crew.map(c => `<div class="crew-row"><span>${c.name}</span><span class="crew-pos">${c.position || ''}</span></div>`).join('');
+    }
+    body.innerHTML = html;
+    overlay.classList.add('open');
+  }
+  function closeCrewModal(){
+    document.getElementById('crew-modal-overlay').classList.remove('open');
+  }
+  function saveCrewForDay(i){
+    const text = document.getElementById('crew-edit-text').value;
+    const crew = text.split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+      const parts = l.split(' - ');
+      return {name: parts[0].trim(), position: parts.length > 1 ? parts.slice(1).join(' - ').trim() : ''};
+    });
+    rosterData[i].crew = crew;
+    closeCrewModal();
+    renderRoster();
+    showToast('Crew saved');
+  }
+
+  // ---- Incentive drill-down (reconciliation table) ----
+  let lastReconContext = null;
+  function showIncentiveModal(){
+    if(!lastReconContext){ showToast('Run a comparison first'); return; }
+    const {maxDateObj, maxDateStr, predictedGetUnsched, actualDays} = lastReconContext;
+    const predictedRows = computeIncentiveDetail(rosterData, maxDateObj, predictedGetUnsched);
+    const actualRows = computeIncentiveDetail(actualDays, maxDateObj, null);
+    const renderRows = rows => rows.length
+      ? rows.map(r => `<div class="crew-row" style="display:block;">
+          <div style="display:flex; justify-content:space-between;"><span>${r.day} ${r.date} — ${r.label}</span><span class="crew-pos" style="color:var(--accent-cyan);">+${r.hours.toFixed(2)}h</span></div>
+          ${r.reasons.length ? `<div class="help-text" style="margin:2px 0 0;">${r.reasons.join(', ')}</div>` : ''}
+        </div>`).join('')
+      : '<div class="help-text" style="margin-top:0;">No incentive hours this period.</div>';
+    const body = document.getElementById('incentive-modal-body');
+    body.innerHTML = `
+      <div class="crew-modal-title"><span>Incentives — through ${maxDateStr}</span><span style="cursor:pointer; color:var(--text-muted); padding:4px;" onclick="closeIncentiveModal()">✕</span></div>
+      <div class="help-text" style="margin-top:0;">Monthly overage bonus (&gt;83h flown), if any, isn't tied to a single flight and isn't listed here — it's already folded into the totals though.</div>
+      <div class="eyebrow" style="margin:10px 0 4px;">Predicted</div>
+      ${renderRows(predictedRows)}
+      <div class="eyebrow" style="margin:14px 0 4px;">Actual</div>
+      ${renderRows(actualRows)}`;
+    document.getElementById('incentive-modal-overlay').classList.add('open');
+  }
+  function closeIncentiveModal(){
+    document.getElementById('incentive-modal-overlay').classList.remove('open');
+  }
+
+  // ---- Swap Requests (manual, persisted in this browser) ----
+  const SWAP_STATUSES = ['Proposed', 'Pending', 'Confirmed', 'Cancelled'];
+  function getSwaps(){
+    try{ return JSON.parse(localStorage.getItem('crewboard-swaps') || '[]'); } catch(e){ return []; }
+  }
+  function saveSwaps(swaps){
+    try{ localStorage.setItem('crewboard-swaps', JSON.stringify(swaps)); } catch(e){ showToast('Could not save — storage unavailable'); }
+  }
+  function addSwapRequest(){
+    const date = document.getElementById('swap-date').value.trim();
+    const route = document.getElementById('swap-route').value.trim();
+    const note = document.getElementById('swap-note').value.trim();
+    if(!date || !route){ showToast('Enter a date and route'); return; }
+    const swaps = getSwaps();
+    swaps.push({id: Date.now(), date, route, note, status: 'Proposed', colleagues: []});
+    saveSwaps(swaps);
+    document.getElementById('swap-date').value = '';
+    document.getElementById('swap-route').value = '';
+    document.getElementById('swap-note').value = '';
+    renderSwaps();
+  }
+  function updateSwapStatus(id, status){
+    const swaps = getSwaps();
+    const s = swaps.find(x => x.id === id);
+    if(s) s.status = status;
+    saveSwaps(swaps);
+    renderSwaps();
+  }
+  function removeSwap(id){
+    saveSwaps(getSwaps().filter(x => x.id !== id));
+    renderSwaps();
+  }
+  function addColleagueToSwap(id){
+    const nameEl = document.getElementById('swap-colleague-name-' + id);
+    const noteEl = document.getElementById('swap-colleague-note-' + id);
+    const name = nameEl.value.trim();
+    const note = noteEl.value.trim();
+    if(!name) return;
+    const swaps = getSwaps();
+    const s = swaps.find(x => x.id === id);
+    if(s) s.colleagues.push({name, note});
+    saveSwaps(swaps);
+    renderSwaps();
+  }
+  function removeColleagueFromSwap(swapId, idx){
+    const swaps = getSwaps();
+    const s = swaps.find(x => x.id === swapId);
+    if(s) s.colleagues.splice(idx, 1);
+    saveSwaps(swaps);
+    renderSwaps();
+  }
+  function renderSwaps(){
+    const el = document.getElementById('swap-list');
+    if(!el) return;
+    const swaps = getSwaps();
+    if(swaps.length === 0){ el.innerHTML = '<div class="help-text" style="margin-top:0;">No swap requests yet.</div>'; return; }
+    el.innerHTML = swaps.map(s => `
+      <div class="stub" style="margin-bottom:12px;">
+        <div class="stub-head"><span>${s.date} · ${s.route}</span><button class="day-edit-btn remove" onclick="removeSwap(${s.id})">Remove</button></div>
+        ${s.note ? `<div class="help-text" style="margin-top:0; margin-bottom:8px;">${s.note}</div>` : ''}
+        <div class="field-group" style="margin-bottom:8px;"><label>Status</label><div class="input-wrap">
+          <select onchange="updateSwapStatus(${s.id}, this.value)" style="width:100%; background:transparent; border:none; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:13px; padding:10px 0;">
+            ${SWAP_STATUSES.map(st => `<option value="${st}" ${st === s.status ? 'selected' : ''}>${st}</option>`).join('')}
+          </select>
+        </div></div>
+        <div class="mono" style="font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px;">Relevant Crew</div>
+        ${s.colleagues.map((c, idx) => `<div class="crew-row"><span>${c.name}${c.note ? ' <span class="crew-pos">' + c.note + '</span>' : ''}</span><span style="cursor:pointer; color:var(--text-muted); padding:0 4px;" onclick="removeColleagueFromSwap(${s.id},${idx})">✕</span></div>`).join('') || '<div class="help-text" style="margin-top:0;">None added yet.</div>'}
+        <div style="display:flex; gap:6px; margin-top:8px;">
+          <input type="text" id="swap-colleague-name-${s.id}" class="swap-mini-input" placeholder="Name">
+          <input type="text" id="swap-colleague-note-${s.id}" class="swap-mini-input" placeholder="Note (optional)">
+          <button class="day-edit-btn" style="border-color:var(--accent-cyan); color:var(--accent-cyan);" onclick="addColleagueToSwap(${s.id})">+</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  renderSwaps();
+
+  // ---- Check Actual Time (AviationStack, free tier — see Settings for caveats) ----
+  async function fetchActualForLeg(apiKey, airlineCode, d, l){
+    // Returns {ok, block, time, message} — does NOT touch the DOM, so it's usable both for a
+    // single-flight check and for looping over many flights in bulk.
+    const flightIata = airlineCode + l.flt;
+    const [dd, mm] = d.date.split('/');
+    const isoDate = ROSTER_YEAR + '-' + mm + '-' + dd;
+    try{
+      const url = 'http://api.aviationstack.com/v1/flights?access_key=' + encodeURIComponent(apiKey) + '&flight_iata=' + encodeURIComponent(flightIata) + '&flight_date=' + isoDate;
+      const res = await fetch(url);
+      const json = await res.json();
+      if(json.error) return {ok: false, message: 'API error: ' + (json.error.message || json.error.code || 'unknown')};
+      const flights = json.data || [];
+      if(flights.length === 0) return {ok: false, message: 'no data for ' + d.date + ' (free tier may not cover this date)'};
+      const f = flights[0];
+      const depActual = f.departure && (f.departure.actual || f.departure.estimated);
+      const arrActual = f.arrival && (f.arrival.actual || f.arrival.estimated);
+      if(!depActual || !arrActual) return {ok: false, message: 'no actual times reported yet'};
+      const depDate = new Date(depActual);
+      const arrDate = new Date(arrActual);
+      const blockHours = (arrDate - depDate) / 3600000;
+      if(!(blockHours > 0) || blockHours > 20) return {ok: false, message: 'implausible duration returned'};
+      const toUtcHM = dt => String(dt.getUTCHours()).padStart(2, '0') + ':' + String(dt.getUTCMinutes()).padStart(2, '0');
+      const crossesDay = depDate.getUTCDate() !== arrDate.getUTCDate() || depDate.getUTCMonth() !== arrDate.getUTCMonth();
+      return {ok: true, block: blockHours, time: toUtcHM(depDate) + ' – ' + toUtcHM(arrDate) + (crossesDay ? '⁺¹' : '')};
+    } catch(err){
+      return {ok: false, message: 'network/API error'};
+    }
+  }
+
+  async function checkActualTime(dayIdx, legIdx){
+    const apiKey = document.getElementById('flight-api-key').value.trim();
+    const airlineCode = document.getElementById('flight-airline-code').value.trim() || '6H';
+    if(!apiKey){ showToast('Add your AviationStack API key in Settings first'); return; }
+    const d = rosterData[dayIdx];
+    const l = d && d.legs && d.legs[legIdx];
+    if(!l){ return; }
+    const btn = document.getElementById('check-actual-' + dayIdx + '-' + legIdx);
+    if(btn) btn.textContent = '…';
+    const result = await fetchActualForLeg(apiKey, airlineCode, d, l);
+    if(!result.ok){
+      showToast((airlineCode + l.flt) + ': ' + result.message);
+      if(btn) btn.textContent = '🔍';
+      return;
+    }
+    l.block = result.block;
+    l.time = result.time;
+    renderRoster();
+    recalcSalary();
+    showToast('Updated ' + airlineCode + l.flt + ' — ' + result.block.toFixed(2) + 'h. Double-check the date/route match before trusting it!');
+  }
+
+  async function checkAllMissingFlights(){
+    // Bulk version of the 🔍 button — loops only over legs currently missing block hours (not
+    // every flight, and not automatically on page load, since most future flights simply have
+    // no actual data yet and re-checking them every time the app opens would just burn through
+    // the free tier's monthly quota for nothing). Small delay between calls to be a reasonable
+    // API citizen, not to dodge any specific rate limit we know of.
+    const apiKey = document.getElementById('flight-api-key').value.trim();
+    const airlineCode = document.getElementById('flight-airline-code').value.trim() || '6H';
+    if(!apiKey){ showToast('Add your AviationStack API key in Settings first'); return; }
+    const targets = [];
+    rosterData.forEach((d, i) => {
+      if(d.code !== 'DUTY' || !d.legs) return;
+      d.legs.forEach((l, j) => { if(l.block == null) targets.push({dayIdx: i, legIdx: j}); });
+    });
+    if(targets.length === 0){ showToast('Nothing missing — every flight already has block hours'); return; }
+    const btn = document.getElementById('check-all-btn');
+    let updated = 0, failed = 0;
+    for(let k = 0; k < targets.length; k++){
+      const {dayIdx, legIdx} = targets[k];
+      const d = rosterData[dayIdx];
+      const l = d && d.legs && d.legs[legIdx];
+      if(!l || l.block != null) continue; // may have been filled by a previous iteration if the same flight number appears twice
+      if(btn) btn.textContent = 'Checking ' + (k + 1) + '/' + targets.length + '…';
+      const result = await fetchActualForLeg(apiKey, airlineCode, d, l);
+      if(result.ok){ l.block = result.block; l.time = result.time; updated++; }
+      else failed++;
+      if(k < targets.length - 1) await new Promise(r => setTimeout(r, 300));
+    }
+    renderRoster();
+    recalcSalary();
+    if(btn) btn.textContent = 'Check All Missing Flights';
+    showToast('Updated ' + updated + ' of ' + targets.length + ' — ' + failed + ' had no data yet (probably still in the future)');
+  }
+
+  function toggleEditMode(){
+    editMode = !editMode;
+    document.getElementById('edit-mode-btn').textContent = editMode ? 'Exit Edit Mode' : 'Enter Edit Mode';
+    document.getElementById('add-flight-form').style.display = editMode ? 'block' : 'none';
+    document.getElementById('panel-roster').classList.toggle('edit-mode-active', editMode);
+    renderRoster();
+  }
+
+  function cancelFlight(i){
+    const d = rosterData[i];
+    if(!d || d.code !== 'DUTY') return;
+    const route = d.legs && d.legs.length ? d.legs.map(l => l.from).concat(d.legs[d.legs.length-1].to).join('-') : '';
+    rosterData[i] = {date: d.date, day: d.day, code: 'CXL', label: 'Cancelled' + (route ? ' — was ' + route : '')};
+    renderRoster();
+    renderCalendar();
+    renderNextDuty();
+    renderAvailableWindows();
+    renderFTL();
+    recalcSalary();
+    showToast('Flight cancelled — 3.00h credit applied');
+  }
+
+  function removeEntry(i){
+    rosterData.splice(i, 1);
+    renderRoster();
+    renderCalendar();
+    renderNextDuty();
+    renderAvailableWindows();
+    renderFTL();
+    recalcSalary();
+    showToast('Entry removed');
+  }
+
+  function parseRouteString(route){
+    const stops = route.split('-').map(s => s.trim().toUpperCase()).filter(Boolean);
+    const legs = [];
+    for(let k = 0; k < stops.length - 1; k++) legs.push({from: stops[k], to: stops[k+1]});
+    return legs;
+  }
+
+  function renderAddFlightLegInputs(){
+    const route = document.getElementById('af-route').value;
+    const legs = parseRouteString(route);
+    const el = document.getElementById('af-leg-inputs');
+    if(legs.length === 0){ el.innerHTML = ''; return; }
+    el.innerHTML = legs.map((l, k) =>
+      `<div class="field-group"><label>Block hours: ${l.from} → ${l.to}</label><div class="input-wrap"><input type="number" class="af-leg-block" data-idx="${k}" step="0.05" placeholder="2.5"></div></div>`
+    ).join('');
+  }
+
+  function parseWhatsAppMessage(){
+    // Best-effort extraction from a pasted crew-assignment message. Fills the Add Flight
+    // fields below so the person can review and correct before adding — never adds directly.
+    const text = document.getElementById('wa-paste').value;
+    const status = document.getElementById('wa-parse-status');
+    status.style.display = 'block';
+    if(!text.trim()){
+      status.style.color = 'var(--danger)';
+      status.textContent = 'Paste a message first.';
+      return;
+    }
+    const found = [];
+
+    const dateMatch = text.match(/\b(\d{1,2})[.\/\-](\d{1,2})(?:[.\/\-]\d{2,4})?\b/);
+    if(dateMatch){
+      const dd = dateMatch[1].padStart(2, '0'), mm = dateMatch[2].padStart(2, '0');
+      const dateStr = dd + '/' + mm;
+      document.getElementById('af-date').value = dateStr;
+      found.push('date ' + dateStr);
+      const dObj = new Date(ROSTER_YEAR, parseInt(mm, 10) - 1, parseInt(dd, 10));
+      if(!isNaN(dObj)) document.getElementById('af-day').value = WEEK[dObj.getDay()];
+    }
+
+    const timeMatches = [...text.matchAll(/\b([01]?\d|2[0-3]):([0-5]\d)\b/g)].map(m => m[1].padStart(2, '0') + ':' + m[2]);
+    if(timeMatches.length >= 1){
+      document.getElementById('af-report').value = timeMatches[0];
+      found.push('report ' + timeMatches[0]);
+    }
+    if(timeMatches.length >= 2){
+      document.getElementById('af-debrief').value = timeMatches[timeMatches.length - 1];
+      found.push('debrief ' + timeMatches[timeMatches.length - 1]);
+    }
+
+    const EXCLUDE_CODES = new Set(['ETA','ETD','UTC','GMT','PIC','SIC','FYI','ASAP','ISR']);
+    const allCodes = (text.match(/\b[A-Z]{3}\b/g) || []).filter(c => !EXCLUDE_CODES.has(c));
+    const routeCodes = [];
+    allCodes.forEach(c => { if(routeCodes[routeCodes.length - 1] !== c) routeCodes.push(c); });
+    if(routeCodes.length >= 2){
+      document.getElementById('af-route').value = routeCodes.join('-');
+      renderAddFlightLegInputs();
+      found.push('route ' + routeCodes.join('-'));
+    }
+
+    if(found.length === 0){
+      status.style.color = 'var(--danger)';
+      status.textContent = "Couldn't confidently find a date, time, or route in that text — fill in the fields below by hand.";
+    } else {
+      status.style.color = 'var(--accent-cyan)';
+      status.textContent = 'Found: ' + found.join(' · ') + '. Check these against the message, then fill in block hours — those aren\'t guessed.';
+    }
+  }
+
+  function minutesToTimeStr(totalMin){
+    let day1 = Math.floor(totalMin / 1440) >= 1;
+    let m = ((totalMin % 1440) + 1440) % 1440;
+    const h = Math.floor(m / 60), mi = Math.round(m % 60);
+    return String(h).padStart(2,'0') + ':' + String(mi).padStart(2,'0') + (day1 ? '⁺¹' : '');
+  }
+
+  function buildSyntheticLegTimes(reportLocalHM, blocks){
+    // Estimates UTC clock times from Report (local Israel time) + cumulative block hours,
+    // assuming legs run back-to-back with no ground time — good enough for Shabbat auto-detection,
+    // not a substitute for your real schedule.
+    const [h, m] = reportLocalHM.split(':').map(Number);
+    let cursorUTC = (h * 60 + m) - 180; // local -> UTC
+    return blocks.map(b => {
+      const startUTC = cursorUTC;
+      const endUTC = cursorUTC + Math.round(b * 60);
+      cursorUTC = endUTC;
+      return minutesToTimeStr(startUTC) + ' – ' + minutesToTimeStr(endUTC);
+    });
+  }
+
+  function insertRosterEntry(entry){
+    // Inserts at the correct chronological position instead of always appending at the end —
+    // the day list, calendar, and every date-ordered feature (activity-day index, same-day
+    // rank, available windows) assume rosterData stays in date order.
+    const entryDateObj = buildDateObj(entry.date, '12:00');
+    let insertIdx = rosterData.length; // fallback: append if we can't place it or date is unparseable
+    if(entryDateObj){
+      for(let i = 0; i < rosterData.length; i++){
+        const dObj = buildDateObj(rosterData[i].date, '12:00');
+        if(dObj && dObj > entryDateObj){ insertIdx = i; break; }
+      }
+    }
+    rosterData.splice(insertIdx, 0, entry);
+  }
+
+  function detectImplicitLayoverGaps(){
+    // Some schedule exports only include a row for a day when something is actually
+    // happening — no explicit "LAYOVER" placeholder for the days in between an outbound and
+    // inbound flight of the same trip. That silently undercounts BOTH the 14th-activity-day
+    // tally and per-diem units for every multi-day trip in the roster. Detect these by finding
+    // consecutive DUTY entries where the first one lands away from home and the next one
+    // departs from that exact same city, with calendar dates in between that have no entry at
+    // all — never touches a date that already has SOME entry, real or otherwise.
+    const gaps = [];
+    const dutyEntries = rosterData.filter(d => d.code === 'DUTY' && d.legs && d.legs.length);
+    for(let k = 0; k < dutyEntries.length - 1; k++){
+      const cur = dutyEntries[k], next = dutyEntries[k+1];
+      const curEndCity = cur.legs[cur.legs.length - 1].to;
+      const nextStartCity = next.legs[0].from;
+      if(!curEndCity || curEndCity === HOME || curEndCity !== nextStartCity) continue;
+      const curDateObj = buildDateObj(cur.date, '12:00');
+      const nextDateObj = buildDateObj(next.date, '12:00');
+      if(!curDateObj || !nextDateObj) continue;
+      const dayGap = Math.round((nextDateObj - curDateObj) / 86400000);
+      if(dayGap <= 1) continue; // consecutive days — nothing missing in between
+      for(let g = 1; g < dayGap; g++){
+        const gapDateObj = new Date(curDateObj.getTime() + g * 86400000);
+        const gapDateStr = String(gapDateObj.getDate()).padStart(2, '0') + '/' + String(gapDateObj.getMonth() + 1).padStart(2, '0');
+        if(rosterData.some(d => d.date === gapDateStr)) continue; // don't touch a date that already has real data
+        gaps.push({date: gapDateStr, day: WEEK[gapDateObj.getDay()], city: curEndCity});
+      }
+    }
+    return gaps;
+  }
+
+  function fillImplicitLayovers(){
+    const gaps = detectImplicitLayoverGaps();
+    const panel = document.getElementById('layover-review-panel');
+    if(gaps.length === 0){
+      panel.innerHTML = '<div class="help-text" style="margin-top:8px;">No gaps found — every multi-day trip already has an explicit layover entry for each day in between.</div>';
+      return;
+    }
+    panel.innerHTML = `
+      <div class="help-text" style="margin-top:8px;">Found ${gaps.length} day(s) with no entry at all, sitting between an outbound and inbound flight to the same city — these are almost certainly layover days your export just didn't include a row for:</div>
+      ${gaps.map(g => `<div class="stub" style="margin-bottom:8px;"><span>${g.day} ${g.date} — Layover, ${g.city}</span></div>`).join('')}
+      <button class="load-btn" style="background:#8B6FD9; border-color:#8B6FD9; color:#fff;" onclick="applyImplicitLayovers()">Add These ${gaps.length} Layover Day(s)</button>`;
+  }
+
+  function applyImplicitLayovers(){
+    const gaps = detectImplicitLayoverGaps(); // recompute fresh in case anything changed since review
+    gaps.forEach(g => insertRosterEntry({date: g.date, day: g.day, code: 'LAYOVER', label: 'Layover — ' + g.city + ' (inferred from gap)'}));
+    document.getElementById('layover-review-panel').innerHTML = `<div class="help-text" style="margin-top:8px; color:#8B6FD9;">Added ${gaps.length} layover day(s). Your activity-day count and per-diem total now reflect them.</div>`;
+    renderRoster();
+    renderCalendar();
+    recalcSalary();
+    renderAvailableWindows();
+    renderFTL();
+    showToast('Added ' + gaps.length + ' inferred layover day(s)');
+  }
+
+  function insertIntoCopy(copy, entry){
+    // Same chronological placement as insertRosterEntry, but on a standalone array copy —
+    // used by What If, which must never touch the real rosterData.
+    const entryDateObj = buildDateObj(entry.date, '12:00');
+    let insertIdx = copy.length;
+    if(entryDateObj){
+      for(let i = 0; i < copy.length; i++){
+        const dObj = buildDateObj(copy[i].date, '12:00');
+        if(dObj && dObj > entryDateObj){ insertIdx = i; break; }
+      }
+    }
+    copy.splice(insertIdx, 0, entry);
+  }
+
+  function autofillWhatIfBlock(){
+    const dest = document.getElementById('wi-dest').value.trim().toUpperCase();
+    if(!dest) return;
+    const estimates = getRouteEstimates();
+    const out = estimates[HOME + '-' + dest];
+    const back = estimates[dest + '-' + HOME];
+    if(out != null && back != null) document.getElementById('wi-block').value = (out + back).toFixed(2);
+  }
+
+  function computeWhatIf(){
+    const date = document.getElementById('wi-date').value.trim();
+    const report = document.getElementById('wi-report').value.trim();
+    const debrief = document.getElementById('wi-debrief').value.trim();
+    const dest = document.getElementById('wi-dest').value.trim().toUpperCase();
+    const totalBlock = parseFloat(document.getElementById('wi-block').value);
+    const offerType = document.getElementById('wi-offer-type').value; // 'crew' or 'swap'
+    const resultEl = document.getElementById('wi-result');
+    if(!date || !report || !debrief || !dest){ showToast('Fill in date, report, debrief, and destination'); return; }
+    if(isNaN(totalBlock) || totalBlock <= 0){ showToast('Enter total block hours for the round trip'); return; }
+    const dObj = buildDateObj(date, '12:00');
+    if(!dObj){ showToast('Date should be DD/MM'); return; }
+    const day = WEEK[dObj.getDay()];
+    const perLeg = totalBlock / 2;
+    const times = buildSyntheticLegTimes(report, [perLeg, perLeg]);
+    const isUnscheduled = offerType === 'crew';
+    const legs = [
+      {flt: 'WI', ac: '320', from: HOME, to: dest, time: times[0], block: perLeg},
+      {flt: 'WI', ac: '320', from: dest, to: HOME, time: times[1], block: perLeg}
+    ];
+    const hypotheticalDay = {date, day, code: 'DUTY', report, debrief, legs};
+
+    // Live checkbox state, keyed by object reference rather than array position — needed
+    // because the hypothetical array below has a different index layout than the live
+    // rendered roster once the new day is inserted partway through it.
+    const liveIndex = new Map();
+    rosterData.forEach((d, i) => liveIndex.set(d, i));
+    const liveGetUnsched = (d, l, i, j) => {
+      const idx = liveIndex.get(d);
+      if(idx == null) return false;
+      const cb = document.querySelector(`.unsched-check[data-day="${idx}"][data-leg="${j}"]`);
+      return cb ? cb.checked : false;
+    };
+    const hybridGetUnsched = (d, l, i, j) => {
+      if(d === hypotheticalDay) return isUnscheduled;
+      return liveGetUnsched(d, l, i, j);
+    };
+
+    const oldResult = computeIncomeForDataset(rosterData, null, liveGetUnsched, {includeSeniority: true});
+
+    // A new offer REPLACES whatever was already scheduled that date — it doesn't stack on
+    // top of it. Drop every existing entry for this date before adding the hypothetical one.
+    const replaced = rosterData.filter(d => d.date === date);
+    const newRoster = rosterData.filter(d => d.date !== date);
+    insertIntoCopy(newRoster, hypotheticalDay);
+
+    const newResult = computeIncomeForDataset(newRoster, null, hybridGetUnsched, {includeSeniority: true});
+    const diff = newResult.totalIncome - oldResult.totalIncome;
+
+    const newFlightIncentives = computeIncentiveDetail(newRoster, null, hybridGetUnsched).filter(r => r.date === date);
+    const newFlightHours = newFlightIncentives.reduce((s, r) => s + r.hours, 0);
+    const crossesOverage = oldResult.rawBlockHours <= MONTHLY_BLOCK_THRESHOLD && newResult.rawBlockHours > MONTHLY_BLOCK_THRESHOLD;
+
+    // Adding or replacing an activity day shifts the count for every later activity day too —
+    // a flight that wasn't the 14th activity day yet might become it (or vice versa) purely
+    // because this one moved the running total. Detect and call that out explicitly rather
+    // than leaving it invisible inside the total.
+    const oldDayIndex = computeActivityDayIndices(rosterData);
+    const newDayIndex = computeActivityDayIndices(newRoster);
+    let rippleDates = [];
+    Object.keys(newDayIndex).forEach(dt => {
+      if(dt === date) return; // the flight itself — already described above
+      const wasVeteran = (oldDayIndex[dt] || 0) >= 14;
+      const isVeteranNow = (newDayIndex[dt] || 0) >= 14;
+      if(wasVeteran !== isVeteranNow) rippleDates.push(dt);
+    });
+
+    const replacedSummary = replaced.length
+      ? replaced.map(d => (d.code === 'DUTY' && d.legs) ? d.legs.map(l => l.from + '→' + l.to).join(', ') : (d.label || d.code)).join('; ')
+      : null;
+
+    resultEl.innerHTML = `
+      <div class="help-text" style="margin-top:0; ${replacedSummary ? 'color:var(--accent-amber);' : ''}">${replacedSummary ? 'Replaces what was already scheduled on ' + date + ': ' + replacedSummary + '.' : date + ' was previously free — this adds a new duty day.'}</div>
+      <div class="help-text" style="margin-top:4px;">${offerType === 'crew' ? 'Treated as an unscheduled crew assignment' : 'Treated as a swap — no unscheduled-flight bonus, since you\'d have been working that day either way'}.${newFlightIncentives.length ? ' This flight alone earns ' + newFlightHours.toFixed(2) + 'h of incentive: ' + newFlightIncentives.map(r => r.reasons.join(', ')).join('; ') + '.' : ' No Shabbat/holiday/unscheduled incentive applies to this flight.'}${crossesOverage ? ' It also pushes you over the 83h monthly threshold, adding the +0.5×/hr Monthly Overage Bonus on the hours above it (already included in New Salary below).' : ''}${rippleDates.length ? ' It also shifts ' + rippleDates.length + ' other day(s) — ' + rippleDates.join(', ') + ' — across the 14th-activity-day threshold, changing their veteran incentive too (already included in New Salary below).' : ''}</div>
+      <table style="width:100%; border-collapse:collapse; margin-top:10px; font-size:12.5px;">
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Old Salary</td><td style="text-align:right; padding:6px 4px;" class="mono">₪${oldResult.totalIncome.toLocaleString(undefined, {maximumFractionDigits: 0})}</td></tr>
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">New Salary — ${dest}, ${totalBlock.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">₪${newResult.totalIncome.toLocaleString(undefined, {maximumFractionDigits: 0})}</td></tr>
+        <tr><td style="padding:8px 4px; font-weight:700; color:var(--accent-cyan);">Difference</td><td style="text-align:right; padding:8px 4px; font-weight:700; color:var(--accent-cyan);" class="mono">${diff >= 0 ? '+' : ''}₪${diff.toLocaleString(undefined, {maximumFractionDigits: 0})}</td></tr>
+      </table>`;
+  }
+
+  function submitAddFlight(){
+    const date = document.getElementById('af-date').value.trim();
+    const day = document.getElementById('af-day').value;
+    const report = document.getElementById('af-report').value.trim();
+    const debrief = document.getElementById('af-debrief').value.trim();
+    const route = document.getElementById('af-route').value.trim();
+    const unsched = document.getElementById('af-unsched').checked;
+    if(!date || !report || !debrief || !route){ showToast('Fill in date, report, debrief, and route'); return; }
+    const stops = parseRouteString(route);
+    if(stops.length === 0){ showToast('Route needs at least two airports, e.g. TLV-ATH'); return; }
+    const blockInputs = document.querySelectorAll('.af-leg-block');
+    const blocks = Array.from(blockInputs).map(inp => parseFloat(inp.value));
+    if(blocks.some(b => isNaN(b) || b <= 0)){ showToast('Enter a block-hours value for every leg'); return; }
+    const times = buildSyntheticLegTimes(report, blocks);
+    const legs = stops.map((s, k) => ({flt: 'ADD', ac: '320', from: s.from, to: s.to, time: times[k], block: blocks[k], unschedDefault: unsched}));
+    insertRosterEntry({date, day, code: 'DUTY', report, debrief, legs});
+    document.getElementById('af-date').value = '';
+    document.getElementById('af-report').value = '';
+    document.getElementById('af-debrief').value = '';
+    document.getElementById('af-route').value = '';
+    document.getElementById('af-leg-inputs').innerHTML = '';
+    renderRoster();
+    renderCalendar();
+    renderNextDuty();
+    renderAvailableWindows();
+    renderFTL();
+    recalcSalary();
+    showToast('Flight added to roster');
+  }
+
+  // ---- Load Roster (PDF) ----
+  let pendingParsedDays = null;
+
+  document.getElementById('pdf-input').addEventListener('change', handlePdfUpload);
+  document.getElementById('csv-input').addEventListener('change', handleCsvUpload);
+  document.getElementById('recon-file-input').addEventListener('change', handleReconFileUpload);
+
+  async function handlePdfUpload(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    // This button now accepts CSV too — detect by extension and hand off to the existing
+    // CSV/XLSX parser rather than duplicating that logic here.
+    const nameLower = (file.name || '').toLowerCase();
+    if(nameLower.endsWith('.csv') || file.type === 'text/csv' || nameLower.endsWith('.xlsx') || nameLower.endsWith('.xls')){
+      return handleCsvUpload(e);
+    }
+    const status = document.getElementById('parse-status');
+    status.style.display = 'block';
+    status.style.color = 'var(--text-muted)';
+    if(typeof pdfjsLib === 'undefined'){
+      status.style.color = 'var(--danger)';
+      status.textContent = "The PDF reader library didn't load (network/CDN blocked). Send the PDF to me in chat instead — that path always works.";
+      return;
+    }
+    status.textContent = 'Reading PDF…';
+    try{
+      const buf = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({data: buf}).promise;
+      let fullText = '';
+      for(let p = 1; p <= pdf.numPages; p++){
+        const page = await pdf.getPage(p);
+        const content = await page.getTextContent();
+        fullText += content.items.map(it => it.str).join(' ') + '\n';
+      }
+      const parsed = parseRosterText(fullText);
+      if(parsed.days.length === 0){
+        status.style.color = 'var(--danger)';
+        status.textContent = "Couldn't recognize any duty rows in this PDF. Send it to me in chat instead and I'll parse it manually.";
+        return;
+      }
+      status.style.display = 'none';
+      showReview(parsed);
+    }catch(err){
+      status.style.color = 'var(--danger)';
+      status.textContent = "Couldn't read this PDF (" + err.message + "). Send it to me in chat instead.";
+    }
+  }
+
+  function parseRosterText(text){
+    const isUTC = /All times in UTC/i.test(text);
+    const dutyCodeMap = DUTY_CODE_MAP;
+    const dateBlockRe = /(\d{2}\/\d{2}\/\d{4})\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+([\s\S]*?)(?=\d{2}\/\d{2}\/\d{4}\s+(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)|Expiry Dates|Memos|$)/g;
+    const days = [];
+    let m;
+    while((m = dateBlockRe.exec(text)) !== null){
+      const dateStr = m[1], dow = m[2], block = m[3];
+      const parts = dateStr.split('/');
+      const shortDate = parts[0] + '/' + parts[1];
+      let code = null;
+      for(const c of Object.keys(dutyCodeMap)){
+        if(new RegExp('\\b' + c + '\\b').test(block)){ code = c; break; }
+      }
+      const flightMatches = [...block.matchAll(/(\d{2,4})\s*\[(\d{3})\]/g)];
+      const routeMatches = [...block.matchAll(/([A-Z]{3})\s*-\s*([A-Z]{3})/g)];
+      const timeMatches = [...block.matchAll(/A?(\d{2}:\d{2})(⁺¹|\+1)?/g)];
+
+      if(flightMatches.length > 0 && routeMatches.length >= flightMatches.length){
+        const legs = flightMatches.map((fm, idx) => {
+          const rt = routeMatches[idx] || routeMatches[routeMatches.length - 1];
+          return {flt: fm[1], ac: fm[2], from: rt[1], to: rt[2], time: null, block: null};
+        });
+        let report = null, debrief = null;
+        if(timeMatches.length >= 2){
+          report = timeMatches[0][1];
+          const last = timeMatches[timeMatches.length - 1];
+          debrief = last[1] + (last[2] ? '⁺¹' : '');
+          const middle = timeMatches.slice(1, timeMatches.length - 1);
+          legs.forEach((leg, idx) => {
+            const dep = middle[idx * 2], arr = middle[idx * 2 + 1];
+            if(dep && arr){
+              leg.time = dep[1] + ' – ' + arr[1] + (arr[2] ? '⁺¹' : '');
+              if(isUTC) leg.block = computeUtcBlock(dep[1], arr[1], !!arr[2]);
+            }
+          });
+        }
+        days.push({date: shortDate, day: dow.toUpperCase(), code: 'DUTY', report, debrief, flatCredit: legs.length === 4 ? 8 : undefined, legs});
+      } else if(code){
+        days.push({date: shortDate, day: dow.toUpperCase(), code, label: dutyCodeMap[code]});
+      }
+    }
+    return {days, isUTC};
+  }
+
+  function computeUtcBlock(dep, arr, plusOne){
+    const [dh, dm] = dep.split(':').map(Number);
+    const [ah, am] = arr.split(':').map(Number);
+    let depMin = dh * 60 + dm;
+    let arrMin = ah * 60 + am + (plusOne ? 1440 : 0);
+    if(!plusOne && arrMin < depMin) arrMin += 1440;
+    return (arrMin - depMin) / 60;
+  }
+
+  function localLegToUtc(depLocalHM, depAirport, arrLocalHM, arrAirport, arrMarkedPlusOne){
+    // A Local Station export gives departure in the FROM airport's local time and arrival in
+    // the TO airport's local time — two different clocks. Convert each to UTC using
+    // AIRPORT_UTC_OFFSET, then the normal duration math applies. Returns null if either
+    // airport's offset isn't known.
+    const depOffset = AIRPORT_UTC_OFFSET[depAirport];
+    const arrOffset = AIRPORT_UTC_OFFSET[arrAirport];
+    if(depOffset == null || arrOffset == null) return null;
+    const [dh, dm] = depLocalHM.split(':').map(Number);
+    const [ah, am] = arrLocalHM.split(':').map(Number);
+    let depUTC = ((dh * 60 + dm - depOffset * 60) % 1440 + 1440) % 1440;
+    let arrUTC = ((ah * 60 + am - arrOffset * 60) % 1440 + 1440) % 1440;
+    // NOTE: arrMarkedPlusOne (the source file's own ⁺¹/next-day marker) is intentionally NOT
+    // used here. It describes the arrival's LOCAL calendar date differing from the departure's
+    // LOCAL date — completely normal when crossing time zones — which converting both to a
+    // shared UTC frame already accounts for. Applying it as an extra +24h on top double-counts
+    // the rollover (confirmed: turned a real 11.33h JFK–TLV flight into 35.33h). The plain
+    // arrUTC < depUTC check below is the correct and sufficient day-rollover signal here.
+    if(arrUTC < depUTC) arrUTC += 1440;
+    return {block: (arrUTC - depUTC) / 60, time: minutesToTimeStr(depUTC) + ' – ' + minutesToTimeStr(arrUTC)};
+  }
+
+  async function handleCsvUpload(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const status = document.getElementById('parse-status');
+    status.style.display = 'block';
+    status.style.color = 'var(--text-muted)';
+    if(typeof XLSX === 'undefined'){
+      status.style.color = 'var(--danger)';
+      status.textContent = "The spreadsheet reader library didn't load (network/CDN blocked). Send the file to me in chat instead — that path always works.";
+      return;
+    }
+    status.textContent = 'Reading file…';
+    try{
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type: 'array', cellDates: true});
+      if(wb.Sheets['CurrentDataOps']){
+        // This is a FANFAIR actual-times payroll file, not a roster/schedule export — loading
+        // it here would silently corrupt the predicted roster with numbers that don't mean
+        // what this parser assumes them to mean. Point at the right button instead.
+        status.style.color = 'var(--danger)';
+        status.textContent = "This looks like a Fanfare actual-times file, not a roster export — use \"Load Fanfare\" in the Reconcile section (Salary tab) instead. Loading it here would corrupt your predicted roster.";
+        return;
+      }
+      const sheet = wb.Sheets[wb.SheetNames[0]];
+      const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: '', raw: false});
+      const isUTC = rows.some(r => r.some(c => /All times in UTC/i.test(String(c || ''))));
+      const parsed = parseSpreadsheetRoster(rows, isUTC);
+      if(parsed.days.length === 0){
+        status.style.color = 'var(--danger)';
+        status.textContent = "Couldn't find a recognizable schedule table in this file — this CSV/XLSX parser is new and untested against a real export. Send the file to me in chat and I'll fix the parser.";
+        return;
+      }
+      status.style.display = 'none';
+      showReview({days: parsed.days, isUTC});
+    } catch(err){
+      status.style.color = 'var(--danger)';
+      status.textContent = "Couldn't read this file (" + err.message + "). Send it to me in chat instead.";
+    }
+  }
+
+  function parseCrewCell(cell){
+    // Format seen in real exports: "CP - 1696 - WEINGARTEN, AMIR" per line.
+    if(!cell) return [];
+    return String(cell).split('\n').map(l => l.trim()).filter(Boolean).map(l => {
+      const parts = l.split(' - ');
+      if(parts.length >= 3) return {name: parts.slice(2).join(' - ').trim(), position: parts[0].trim()};
+      return {name: l, position: ''};
+    });
+  }
+
+  function parseSpreadsheetRoster(rows, isUTC){
+    // Best-effort match to the eCrew "Personal Crew Schedule Report" export layout:
+    // Date | Duties | Details | Report times | Actual times/Delays | Debrief times | Indicators | Crew
+    let headerIdx = -1;
+    const cols = {};
+    for(let i = 0; i < rows.length; i++){
+      const row = (rows[i] || []).map(c => String(c || '').trim().toLowerCase());
+      if(row.includes('date') && row.some(c => c.indexOf('dut') === 0)){
+        headerIdx = i;
+        row.forEach((c, idx) => {
+          if(c === 'date') cols.date = idx;
+          else if(c.indexOf('dut') === 0) cols.duties = idx;
+          else if(c.indexOf('detail') === 0) cols.details = idx;
+          else if(c.indexOf('report') === 0) cols.report = idx;
+          else if(c.indexOf('actual') === 0 || c.indexOf('delay') !== -1) cols.actual = idx;
+          else if(c.indexOf('debrief') === 0) cols.debrief = idx;
+          else if(c.indexOf('indicat') === 0) cols.indicator = idx;
+          else if(c.indexOf('crew') === 0) cols.crew = idx;
+        });
+        break;
+      }
+    }
+    if(headerIdx === -1 || cols.date === undefined || cols.duties === undefined) return {days: []};
+
+    const days = [];
+    for(let i = headerIdx + 1; i < rows.length; i++){
+      const row = rows[i];
+      if(!row || row.every(c => String(c || '').trim() === '')) continue;
+      const dateCell = String(row[cols.date] || '').trim();
+      const dateMatch = dateCell.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
+      if(!dateMatch) continue; // header/footer/subtotal row, not a data row
+      const shortDate = dateMatch[1].padStart(2, '0') + '/' + dateMatch[2].padStart(2, '0');
+      const dowMatch = dateCell.match(/\b(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i);
+      let dow = dowMatch ? dowMatch[1].toUpperCase() : null;
+      if(!dow){
+        const dObj = new Date(parseInt(dateMatch[3], 10), parseInt(dateMatch[2], 10) - 1, parseInt(dateMatch[1], 10));
+        if(!isNaN(dObj)) dow = WEEK[dObj.getDay()];
+      }
+      if(!dow) continue;
+
+      const dutiesCell = String(row[cols.duties] || '').trim();
+      const detailsCell = cols.details !== undefined ? String(row[cols.details] || '').trim() : '';
+      if(!dutiesCell) continue;
+
+      let matchedCode = null;
+      for(const c of Object.keys(DUTY_CODE_MAP)){
+        if(new RegExp('^' + c + '\\b').test(dutiesCell)){ matchedCode = c; break; }
+      }
+      if(matchedCode){
+        days.push({date: shortDate, day: dow, code: matchedCode, label: detailsCell || DUTY_CODE_MAP[matchedCode]});
+        continue;
+      }
+
+      // Otherwise treat as a DUTY (flight) row — Duties holds flight numbers, Details holds routes,
+      // one per line/slash for multi-leg days.
+      const flightLines = dutiesCell.split(/\n|\//).map(s => s.trim()).filter(Boolean);
+      const routeLines = detailsCell.split(/\n|\//).map(s => s.trim()).filter(Boolean);
+      if(routeLines.length === 0) continue; // can't build legs without a route
+
+      const reportCell = cols.report !== undefined ? String(row[cols.report] || '').trim() : '';
+      const debriefCell = cols.debrief !== undefined ? String(row[cols.debrief] || '').trim() : '';
+      const actualCell = cols.actual !== undefined ? String(row[cols.actual] || '').trim() : '';
+      const actualLines = actualCell.split(/\n|\//).map(s => s.trim()).filter(Boolean);
+      const crew = cols.crew !== undefined ? parseCrewCell(row[cols.crew]) : [];
+
+      const legs = routeLines.map((r, idx) => {
+        const routeMatch = r.match(/([A-Z]{3})\s*-\s*([A-Z]{3})/);
+        const fltMatch = (flightLines[idx] || '').match(/(\d{2,4})/);
+        const from = routeMatch ? routeMatch[1] : '???';
+        const to = routeMatch ? routeMatch[2] : '???';
+        let block = null, timeStr = null;
+        const actualMatch = (actualLines[idx] || '').match(/A?(\d{2}:\d{2})(⁺¹|\+1)?\s*-\s*A?(\d{2}:\d{2})(⁺¹|\+1)?/);
+        if(actualMatch){
+          const dep = actualMatch[1], arr = actualMatch[3];
+          const plusOne = !!actualMatch[4];
+          if(isUTC){
+            block = computeUtcBlock(dep, arr, plusOne);
+            timeStr = dep + ' – ' + arr + (plusOne ? '⁺¹' : '');
+          } else {
+            // Local Station: dep is FROM's local time, arr is TO's local time — different
+            // clocks. Convert each via AIRPORT_UTC_OFFSET; null (unknown airport) leaves this
+            // leg's block hours blank rather than computing a wrong number.
+            const converted = localLegToUtc(dep, from, arr, to, plusOne);
+            if(converted){ block = converted.block; timeStr = converted.time; }
+          }
+        }
+        return {flt: fltMatch ? fltMatch[1] : '?', ac: '', from, to, time: timeStr, block};
+      });
+
+      const dayObj = {date: shortDate, day: dow, code: 'DUTY', report: reportCell || null, debrief: debriefCell || null, flatCredit: legs.length === 4 ? 8 : undefined, legs};
+      if(crew.length) dayObj.crew = crew;
+      days.push(dayObj);
+    }
+    return {days};
+  }
+
+  function showReview(parsed){
+    pendingParsedDays = parsed.days;
+    const el = document.getElementById('review-panel');
+    const totalCrew = parsed.days.reduce((n, d) => n + (d.crew ? d.crew.length : 0), 0);
+    const missingBlockLegs = parsed.days.filter(d => d.code === 'DUTY').reduce((n, d) => n + d.legs.filter(l => l.block == null).length, 0);
+    const localNote = 'local-station times — block hours converted via each airport\'s UTC offset' + (missingBlockLegs ? ` (${missingBlockLegs} leg(s) skipped: unknown airport — add it to AIRPORT_UTC_OFFSET, or enter those block hours by hand below)` : '') + '.';
+    let html = `<div class="help-text" style="margin-top:0;">Parsed ${parsed.days.length} days (${parsed.isUTC ? 'UTC times — block hours computed automatically' : localNote})${totalCrew ? ' · crew found for ' + parsed.days.filter(d => d.crew && d.crew.length).length + ' flight(s)' : ''}. Review, then apply.</div>`;
+    parsed.days.forEach(d => {
+      if(d.code === 'DUTY'){
+        html += `<div class="stub"><div class="stub-head"><span>${d.day} ${d.date}</span><span>Report ${d.report || '?'} · Debrief ${d.debrief || '?'}${d.flatCredit ? ' <span class="badge">4-leg, flat 8h</span>' : ''}${d.crew && d.crew.length ? ' <span class="badge" style="border-color:var(--accent-cyan);color:var(--accent-cyan)">' + d.crew.length + ' crew</span>' : ''}</span></div>`;
+        d.legs.forEach(l => {
+          html += `<div class="leg-row"><span class="leg-flt">${l.flt} [${l.ac}]</span><span class="leg-route">${l.from} → ${l.to}</span><span class="leg-time">${l.time || 'no time found'}${l.block != null ? ' · ' + l.block.toFixed(2) + 'h' : ''}</span></div>`;
+        });
+        html += `</div>`;
+      } else {
+        html += `<div class="stub off"><span>${d.day} ${d.date} — ${d.label}</span></div>`;
+      }
+    });
+    html += `<button class="share-btn" onclick="applyParsedRoster()">Apply to Roster</button>
+             <button class="req-btn" style="margin-top:8px;" onclick="discardParsedRoster()">Discard</button>`;
+    el.innerHTML = html;
+    el.style.display = 'block';
+  }
+
+  function applyParsedRoster(){
+    if(!pendingParsedDays) return;
+    rosterData.length = 0;
+    pendingParsedDays.forEach(d => rosterData.push(d));
+    pendingParsedDays = null;
+    document.getElementById('review-panel').style.display = 'none';
+    document.getElementById('review-panel').innerHTML = '';
+    document.getElementById('pdf-input').value = '';
+    document.getElementById('csv-input').value = '';
+    renderRoster();
+    renderCalendar();
+    renderNextDuty();
+    renderAvailableWindows();
+    renderFTL();
+    recalcSalary();
+    showToast('Roster loaded — ' + rosterData.length + ' days');
+  }
+
+  function discardParsedRoster(){
+    pendingParsedDays = null;
+    document.getElementById('review-panel').style.display = 'none';
+    document.getElementById('review-panel').innerHTML = '';
+    document.getElementById('pdf-input').value = '';
+    document.getElementById('csv-input').value = '';
+  }
+
+  // Standby/paid-off/instruction credit and flight-day count are now computed live from
+  // rosterData (see countCode/countFlightDays above) so loading a new PDF updates them automatically.
+
+  function getRouteEstimates(){
+    const el = document.getElementById('route-estimates');
+    const text = el ? el.value : '';
+    const map = {};
+    text.split('\n').forEach(line => {
+      const m = line.match(/([A-Za-z]{3})\s*-\s*([A-Za-z]{3})\s*:\s*([\d.]+)/);
+      if(m) map[m[1].toUpperCase() + '-' + m[2].toUpperCase()] = parseFloat(m[3]);
+    });
+    return map;
+  }
+  function resolveLegBlock(l, estimates){
+    if(l.block != null) return {block: l.block, estimated: false};
+    const key = (l.from || '') + '-' + (l.to || '');
+    const est = estimates ? estimates[key] : undefined;
+    return est != null ? {block: est, estimated: true} : {block: null, estimated: false};
+  }
+
+  function computeCreditCore(days, opts){
+    // Shared engine behind both the live Salary tab (days=rosterData, unsched read from the
+    // rendered checkboxes) and the actual-file reconciliation (days=parsed file, no checkboxes
+    // to read so unscheduled defaults to false, optionally capped to a coverage date).
+    opts = opts || {};
+    const getUnsched = opts.getUnsched || function(){ return false; };
+    const maxDateObj = opts.maxDateObj || null;
+    const estimates = getRouteEstimates();
+    const dayIndex = computeActivityDayIndices(days);
+    const sameDayRank = computeSameDayDutyRank(days);
+    let block = 0, baseBlock = 0, completion = 0, missingCount = 0, estimatedCount = 0, rawBlockHours = 0, tripTimeTotal = 0;
+    days.forEach((d, i) => {
+      if(d.code !== 'DUTY') return;
+      if(maxDateObj){
+        const dObj = buildDateObj(d.date, '23:59');
+        if(dObj && dObj > maxDateObj) return; // outside the comparison's date coverage
+      }
+      const veteranMult = (dayIndex[d.date] >= 14) ? 1.5 : 1;
+      const secondActivityMult = (sameDayRank[i] >= 1) ? 1.5 : 1;
+      if(d.flatCredit){
+        block += d.flatCredit * veteranMult;
+        baseBlock += d.flatCredit;
+        if(d.legs) d.legs.forEach(l => { const resolved = resolveLegBlock(l, estimates); if(resolved.block != null) rawBlockHours += resolved.block; });
+        tripTimeTotal += computeTripTimeHours(d);
+        return; // flatCredit is a manual override already above any per-segment minimum
+      }
+      let dayCredit = 0, dayHasMissing = false, dayRawBlock = 0;
+      const dayShabbat = isShabbatDay(d);
+      (d.legs || []).forEach((l, j) => {
+        const resolved = resolveLegBlock(l, estimates);
+        if(resolved.block == null){ missingCount++; dayHasMissing = true; return; }
+        if(resolved.estimated) estimatedCount++;
+        rawBlockHours += resolved.block;
+        dayRawBlock += resolved.block;
+        baseBlock += resolved.block;
+        const checked = getUnsched(d, l, i, j);
+        const shabbat = dayShabbat;
+        const holiday = HOLIDAY_DATES.includes(d.date);
+        let mult = 1;
+        if(holiday) mult = 2;
+        else if(checked && shabbat) mult = 2;
+        else if(checked) mult = 1.5;
+        else if(shabbat) mult = 1.5;
+        const combinedMult = Math.min(2, mult * veteranMult * secondActivityMult); // no incentive stack exceeds 2x
+        dayCredit += resolved.block * combinedMult;
+      });
+      block += dayCredit;
+      // Per the contract: completion tops up (BT + TT) to the per-trip-type minimum — it is
+      // NOT compared against the incentive-multiplied credit, and there's no separate
+      // trip-time multiplier; TT counts 1:1 toward the minimum directly.
+      if(!dayHasMissing){
+        const tt = computeTripTimeHours(d);
+        tripTimeTotal += tt;
+        const minimum = effectiveMinimumForDay(d);
+        const actual = dayRawBlock + tt;
+        if(actual < minimum) completion += (minimum - actual);
+      }
+    });
+    const overageExcess = Math.max(0, rawBlockHours - MONTHLY_BLOCK_THRESHOLD);
+    const overageBonus = overageExcess * 0.5; // the +0.5/hr on top of the 1x already counted above
+    const totalIncentives = (block - baseBlock) + overageBonus;
+    return {block, completion, missingCount, estimatedCount, rawBlockHours, overageExcess, overageBonus, totalIncentives, tripTimeTotal};
+  }
+
+  function computeIncentiveDetail(days, maxDateObj, getUnsched){
+    // Per-day breakdown of exactly where "Incentives" hours came from — mirrors
+    // computeCreditCore's multiplier logic line for line so it always matches the totals shown
+    // elsewhere; a day only appears here if it actually earned incentive hours.
+    getUnsched = getUnsched || function(){ return false; };
+    const dayIndex = computeActivityDayIndices(days);
+    const sameDayRank = computeSameDayDutyRank(days);
+    const rows = [];
+    days.forEach((d, i) => {
+      if(d.code !== 'DUTY') return;
+      if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return; }
+      const veteranMult = (dayIndex[d.date] >= 14) ? 1.5 : 1;
+      const secondActivityMult = (sameDayRank[i] >= 1) ? 1.5 : 1;
+      const dests = d.legs ? [...new Set(d.legs.map(l => l.to).filter(c => c && c !== HOME))] : [];
+      const label = dests.length ? dests.join('/') : (d.legs && d.legs[0] ? d.legs[0].to : '');
+      if(d.flatCredit){
+        const extra = d.flatCredit * (veteranMult - 1);
+        if(extra > 0.01){
+          const reasons = [];
+          if(veteranMult > 1) reasons.push('day ' + dayIndex[d.date] + ' veteran (14th+)');
+          rows.push({date: d.date, day: d.day, label, hours: extra, reasons});
+        }
+        return;
+      }
+      let dayExtra = 0;
+      const reasonSet = new Set();
+      const dayShabbat = isShabbatDay(d);
+      (d.legs || []).forEach((l, j) => {
+        if(l.block == null) return;
+        const checked = getUnsched(d, l, i, j);
+        const shabbat = dayShabbat;
+        const holiday = HOLIDAY_DATES.includes(d.date);
+        let mult = 1;
+        if(holiday){ mult = 2; reasonSet.add('holiday (2×)'); }
+        else if(checked && shabbat){ mult = 2; reasonSet.add('unscheduled + Shabbat window'); }
+        else if(checked){ mult = 1.5; reasonSet.add('unscheduled flight'); }
+        else if(shabbat){ mult = 1.5; reasonSet.add('Shabbat window touched'); }
+        const combinedMult = Math.min(2, mult * veteranMult * secondActivityMult);
+        dayExtra += l.block * (combinedMult - 1);
+      });
+      if(veteranMult > 1) reasonSet.add('day ' + dayIndex[d.date] + ' veteran (14th+)');
+      if(secondActivityMult > 1) reasonSet.add('2nd flight activity same day');
+      if(dayExtra > 0.01) rows.push({date: d.date, day: d.day, label, hours: dayExtra, reasons: [...reasonSet]});
+    });
+    return rows.sort((a, b) => b.hours - a.hours);
+  }
+
+  function calcCreditBreakdown(){
+    return computeCreditCore(rosterData, {
+      getUnsched: (d, l, i, j) => {
+        const cb = document.querySelector(`.unsched-check[data-day="${i}"][data-leg="${j}"]`);
+        return cb ? cb.checked : false;
+      }
+    });
+  }
+
+  function computeIncomeForDataset(days, maxDateObj, getUnsched, overrides){
+    // Mirrors recalcSalary's income formula, but for an arbitrary dataset (the live roster or
+    // an uploaded actual-times file) and optionally capped to a coverage date. Layover credit
+    // and the manual Ground Activity fields are excluded — they're single period-wide numbers,
+    // not date-stamped, so they can't be fairly split for a partial-period comparison.
+    overrides = overrides || {};
+    const core = computeCreditCore(days, {getUnsched, maxDateObj});
+    const completion = overrides.completion != null ? overrides.completion : core.completion;
+    const tripTimeTotal = overrides.tripTimeTotal != null ? overrides.tripTimeTotal : core.tripTimeTotal;
+    const standbyCredit = countCode('SBSM', maxDateObj, days) * STANDBY_UNIT + countCode('SBSE', maxDateObj, days) * STANDBY_UNIT;
+    const paidoffCredit = countCode('OFFP', maxDateObj, days) * PAIDOFF_UNIT;
+    const insCredit = countCode('INS', maxDateObj, days) * INS_UNIT;
+    const cxlCredit = countCode('CXL', maxDateObj, days) * CXL_UNIT;
+    const nfaTotal = standbyCredit + paidoffCredit + insCredit + cxlCredit;
+    const flightDays = countFlightDays(maxDateObj, days);
+    const transportUnits = countTransportUnits(maxDateObj, days);
+    const perDiemUnits = countPerDiemUnits(maxDateObj, days);
+    const totalCreditHours = core.block + core.overageBonus + completion + nfaTotal;
+
+    const rateH = parseFloat(document.getElementById('rate-hourly').value) || 0;
+    const rateD = parseFloat(document.getElementById('rate-perdiem').value) || 0;
+    const fx = parseFloat(document.getElementById('fx-rate').value) || 0;
+    const rateTransport = parseFloat(document.getElementById('rate-transport').value) || 0;
+    const seniority = overrides.includeSeniority ? (parseFloat(document.getElementById('seniority-value').value) || 0) : 0;
+
+    const creditPay = totalCreditHours * rateH;
+    const transportPay = transportUnits * rateTransport;
+    const perDiemPay = perDiemUnits * rateD;
+    const perDiemILS = perDiemPay * fx;
+    const totalIncome = creditPay + seniority + transportPay + perDiemILS;
+
+    return {totalIncome, totalCreditHours, flightDays, transportUnits, perDiemUnits, missingCount: core.missingCount, estimatedCount: core.estimatedCount, rawBlockHours: core.rawBlockHours, tripTimeTotal, completion, block: core.block, totalIncentives: core.totalIncentives};
+  }
+
+  // ---- AIMS payroll workbook parser (a different file than the "Personal Schedule Report" —
+  // this is the multi-sheet export with CurrentDataOps/CurrentDataNFA raw data tables) ----
+  function readAimsSheet(wb, sheetName, headerRowIdx){
+    if(!wb.Sheets[sheetName]) return [];
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[sheetName], {header: 1, defval: null});
+    const headers = (rows[headerRowIdx] || []).map(h => String(h || '').trim());
+    return rows.slice(headerRowIdx + 1)
+      .map(row => { const obj = {}; headers.forEach((h, i) => { if(h) obj[h] = row[i]; }); return obj; })
+      .filter(o => Object.values(o).some(v => v != null && v !== ''));
+  }
+  function excelDateToDDMM(val){
+    if(val instanceof Date && !isNaN(val)){
+      // Round to the nearest day boundary first — some exports carry tiny floating-point
+      // drift in the date serial that can otherwise push this to the previous day.
+      const rounded = new Date(Math.round(val.getTime() / 86400000) * 86400000);
+      return String(rounded.getUTCDate()).padStart(2, '0') + '/' + String(rounded.getUTCMonth() + 1).padStart(2, '0');
+    }
+    if(typeof val === 'string'){ const m = val.match(/(\d{4})-(\d{2})-(\d{2})/); if(m) return m[3] + '/' + m[2]; }
+    return null;
+  }
+  function excelTimeToHM(val){
+    if(val instanceof Date && !isNaN(val)) return String(val.getUTCHours()).padStart(2, '0') + ':' + String(val.getUTCMinutes()).padStart(2, '0');
+    if(typeof val === 'string'){ const m = val.match(/(\d{1,2}):(\d{2})/); if(m) return m[1].padStart(2, '0') + ':' + m[2]; }
+    if(typeof val === 'number'){ const t = Math.round(val * 1440) % 1440; return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
+    return null;
+  }
+  const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30); // standard Excel/SheetJS date-serial epoch
+  function excelDurationToHours(val, capHours){
+    let h = null;
+    if(val instanceof Date && !isNaN(val)) h = (val.getTime() - EXCEL_EPOCH_UTC) / 3600000; // elapsed hours since epoch — correct for both sub-24h AND multi-day durations, unlike reading getUTCHours() alone which silently drops whole days
+    else if(typeof val === 'string'){ const m = val.match(/(\d{1,3}):(\d{2})(?::(\d{2}))?/); if(m) h = parseInt(m[1], 10) + parseInt(m[2], 10) / 60 + (m[3] ? parseInt(m[3], 10) / 3600 : 0); }
+    else if(typeof val === 'number') h = val * 24;
+    if(h == null) return null;
+    // A single duty-period figure (TT, completion top-up, etc.) is never remotely close to a
+    // full day, let alone dozens of hours. If parsing produced something implausible — the
+    // same failure mode that once misread BT_excel — don't trust it silently; return null so
+    // the caller can skip/flag that row instead of poisoning a sum.
+    if(capHours != null && h > capHours) return null;
+    return h;
+  }
+  function parseAimsWorkbook(wb){
+    // Times are assumed UTC, matching this app's convention elsewhere and standard AIMS
+    // backend practice — untested against a live run, so verify results before trusting them.
+    const opsRows = readAimsSheet(wb, 'CurrentDataOps', 1);
+    const nfaRows = readAimsSheet(wb, 'CurrentDataNFA', 1);
+    const byDate = {}, order = [];
+    opsRows.forEach(r => {
+      const dateStr = excelDateToDDMM(r.Date);
+      if(!dateStr) return;
+      if(!byDate[dateStr]){ byDate[dateStr] = []; order.push(dateStr); }
+      byDate[dateStr].push(r);
+    });
+    const days = [];
+    order.forEach(dateStr => {
+      const rows = byDate[dateStr];
+      const legs = rows.map(r => {
+        const depHM = excelTimeToHM(r.ActualTakeOffTime);
+        const arrHM = excelTimeToHM(r.EndTime);
+        let timeStr = null, block = null;
+        if(depHM && arrHM){
+          const crossesDay = (r.ActualTakeOffDate instanceof Date && r.EndDate instanceof Date)
+            ? r.EndDate.getUTCDate() !== r.ActualTakeOffDate.getUTCDate()
+            : arrHM < depHM;
+          timeStr = depHM + ' – ' + arrHM + (crossesDay ? '⁺¹' : '');
+          // Derived directly from the already-parsed departure/arrival clock times, not a
+          // separately-indexed BT_excel column — a prior version read that column and, on at
+          // least one real file, picked up an unrelated field's value instead (looked like a
+          // header-alignment issue). This is more self-consistent and avoids that risk entirely.
+          block = computeUtcBlock(depHM, arrHM, crossesDay);
+        }
+        // Sanity cap: no real commercial leg is anywhere near 18h. If duration parsing went
+        // wrong (e.g. an unrecognized Excel time format came through as a raw number in a
+        // different unit than expected), this stops a garbage value from being trusted —
+        // it's flagged as missing instead, same as any other unparseable leg.
+        const safeBlock = (block != null && block > 0 && block < 18) ? block : null;
+        return {flt: String(r.FlightNumber || '?'), ac: r.EffectiveAircraftType || '', from: r.LegFrom || '???', to: r.LegTo || '???', time: timeStr, block: safeBlock};
+      });
+      const reportRow = rows.find(r => r.ReportTime != null);
+      const report = reportRow ? excelTimeToHM(reportRow.ReportTime) : null;
+      let debrief = null;
+      rows.forEach(r => { const e = excelTimeToHM(r.EndTime); if(e && (!debrief || e > debrief)) debrief = e; });
+      const [dd, mm] = dateStr.split('/').map(Number);
+      const dObj = new Date(ROSTER_YEAR, mm - 1, dd);
+      const day = WEEK[dObj.getDay()];
+      days.push({date: dateStr, day, code: 'DUTY', report, debrief, flatCredit: legs.length === 4 ? 8 : undefined, legs});
+    });
+    nfaRows.forEach(r => {
+      if(r.AIMSActivity === 'CXL'){
+        const dateStr = excelDateToDDMM(r.ActivityDate);
+        if(!dateStr) return;
+        const [dd, mm] = dateStr.split('/').map(Number);
+        const dObj = new Date(ROSTER_YEAR, mm - 1, dd);
+        days.push({date: dateStr, day: WEEK[dObj.getDay()], code: 'CXL', label: 'Cancelled assignment (actual)'});
+      }
+    });
+    let specialCallHours = 0;
+    let skippedDurationRows = 0;
+    nfaRows.forEach(r => {
+      if(r.AIMSActivity !== 'CXL' && r.DayofActivity_excel != null){
+        const h = excelDurationToHours(r.DayofActivity_excel, 10); // a single NFA activity is never near a full day
+        if(h) specialCallHours += h;
+        else if(r.DayofActivity_excel != null) skippedDurationRows++;
+      }
+    });
+
+    // CurrentDataDuties has the airline's own authoritative TT (trip time) and completion
+    // top-up per duty period — use these instead of recomputing them ourselves, since our own
+    // formula (debrief-minus-report-minus-block) includes standard pre/post report buffers
+    // the airline's real TT figure doesn't, and badly overstates it.
+    const dutyRows = readAimsSheet(wb, 'CurrentDataDuties', 1);
+    const topUpByDate = {}; // completion top-up per duty period — CurrentDataDuties is right for this
+    dutyRows.forEach(r => {
+      const dateStr = excelDateToDDMM(r.StartDate);
+      if(!dateStr) return;
+      const topUpRaw = excelDurationToHours(r.TopUpHours_excel, 10); // bounded by the minimum itself, well under 10h
+      if(r.TopUpHours_excel != null && topUpRaw == null) skippedDurationRows++;
+      topUpByDate[dateStr] = (topUpByDate[dateStr] || 0) + (topUpRaw || 0);
+    });
+
+    // Trip Time: CurrentDataDuties only has rows for actual DUTY periods, so it silently
+    // misses TT accrued on pure layover days (0 block hours, but real ground/waiting time
+    // still counts). Report NFA's per-day TT column includes those — verified against a real
+    // file where CurrentDataDuties summed to 4.25h but Report NFA (and the real payslip)
+    // showed 7.25h for the same period, entirely from layover-day TT this was missing.
+    const nfaSheetRows = wb.Sheets['Report NFA'] ? XLSX.utils.sheet_to_json(wb.Sheets['Report NFA'], {header: 1, defval: null}) : [];
+    const dutyTotals = []; // [{date, tt, topUp}] — summed by the caller against its own coverage cutoff
+    nfaSheetRows.forEach(row => {
+      if(!(row[0] instanceof Date) || isNaN(row[0])) return;
+      const dateStr = excelDateToDDMM(row[0]);
+      if(!dateStr) return;
+      const ttRaw = excelDurationToHours(row[3], 10); // one calendar day's trip time — never near a full day
+      if(row[3] != null && ttRaw == null) skippedDurationRows++;
+      dutyTotals.push({date: dateStr, tt: ttRaw || 0, topUp: topUpByDate[dateStr] || 0});
+    });
+
+    return {days, specialCallHours, dutyTotals, skippedDurationRows, pilotSummary: parseReportPilotSummary(wb)};
+  }
+
+  function findRowValue(rows, label){
+    for(const row of rows){
+      for(let c = 0; c < row.length; c++){
+        if(row[c] === label) return row[c + 1];
+      }
+    }
+    return null;
+  }
+  function parseReportPilotSummary(wb){
+    // "Report Pilot" holds the airline's own final computed totals for the period — BT, TT,
+    // completion, incentive-eligible hours, and (critically) the real bottom-line payment. This
+    // is far more reliable than reconstructing income bottom-up from individual flight legs,
+    // which is where several earlier bugs came from. Used as the authoritative Actual total.
+    if(!wb.Sheets['Report Pilot']) return null;
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets['Report Pilot'], {header: 1, defval: null});
+    const bt = excelDurationToHours(findRowValue(rows, 'שעות טיסה BT'), 300);
+    const tt = excelDurationToHours(findRowValue(rows, 'זמן מסע TRIP TIME'), 100);
+    const completion = excelDurationToHours(findRowValue(rows, 'שעות השלמה'), 100);
+    const incentiveBT = excelDurationToHours(findRowValue(rows, 'כמות שעות BT למאיצים'), 300);
+    const incentivePayment = findRowValue(rows, 'תשלום שעות BT מאיצים');
+    const totalPayment = findRowValue(rows, 'סה"כ לתשלום');
+    const transportDays = findRowValue(rows, 'ימי נסיעה כמות');
+    const transportPay = findRowValue(rows, 'ימי נסיעה ₪');
+    const perDiemDays = findRowValue(rows, 'ימי אש"ל פטור');
+    const perDiemPay = findRowValue(rows, 'אש"ל פטור($)');
+    if(bt == null && totalPayment == null) return null;
+    return {bt, tt, completion, incentiveBT, incentivePayment, totalPayment, transportDays, transportPay, perDiemDays, perDiemPay};
+  }
+
+  async function handleReconFileUpload(e){
+    const file = e.target.files[0];
+    if(!file) return;
+    const status = document.getElementById('recon-file-status');
+    const resultEl = document.getElementById('recon-file-result');
+    resultEl.innerHTML = '';
+    status.style.display = 'block';
+    status.style.color = 'var(--text-muted)';
+    if(typeof XLSX === 'undefined'){
+      status.style.color = 'var(--danger)';
+      status.textContent = "The spreadsheet reader library didn't load. Send the file to me in chat instead.";
+      return;
+    }
+    status.textContent = 'Reading file…';
+    try{
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, {type: 'array', cellDates: true});
+      let parsedDays, extraNote = '', dutyTotals = null, pilotSummary = null;
+      if(wb.Sheets['CurrentDataOps']){
+        // This is the AIMS payroll workbook (CurrentDataOps/CurrentDataNFA raw data), a
+        // different file than the "Personal Schedule Report" export.
+        const aims = parseAimsWorkbook(wb);
+        parsedDays = aims.days;
+        dutyTotals = aims.dutyTotals;
+        pilotSummary = aims.pilotSummary;
+        if(aims.specialCallHours) extraNote = ' The file also shows ' + aims.specialCallHours.toFixed(2) + 'h of special-call/other NFA credit not included in this comparison — add it to Ground Activity manually if you want it counted.';
+        extraNote += ' Actual Trip Time comes from Report NFA and Completion Hours from CurrentDataDuties — both authoritative, not recomputed here.';
+        if(pilotSummary && pilotSummary.totalPayment != null) extraNote += ' Actual Total Income is read directly from Report Pilot\'s own bottom-line figure, not reconstructed from individual flights.';
+        if(aims.skippedDurationRows) extraNote += ' ' + aims.skippedDurationRows + ' duration value(s) in the file looked implausible and were skipped rather than trusted — send the file to me in chat if the totals below still look off.';
+      } else {
+        const sheet = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: '', raw: false});
+        const isUTC = rows.some(r => r.some(c => /All times in UTC/i.test(String(c || ''))));
+        parsedDays = parseSpreadsheetRoster(rows, isUTC).days;
+      }
+      if(!parsedDays || parsedDays.length === 0){
+        status.style.color = 'var(--danger)';
+        status.textContent = "Couldn't find a recognizable schedule table in this file. Send it to me in chat and I'll fix the parser.";
+        return;
+      }
+
+      // Coverage = the latest date this file has ANY row for. If the file stops mid-month,
+      // that absence of later rows IS the boundary — no need to guess mid vs. final.
+      let maxDateObj = null, maxDateStr = null;
+      parsedDays.forEach(d => {
+        const dObj = buildDateObj(d.date, '23:59');
+        if(dObj && (!maxDateObj || dObj > maxDateObj)){ maxDateObj = dObj; maxDateStr = d.date; }
+      });
+      if(!maxDateObj){
+        status.style.color = 'var(--danger)';
+        status.textContent = "Couldn't work out which dates this file covers.";
+        return;
+      }
+
+      let rosterEndObj = null;
+      rosterData.forEach(d => {
+        const dObj = buildDateObj(d.date, '23:59');
+        if(dObj && (!rosterEndObj || dObj > rosterEndObj)) rosterEndObj = dObj;
+      });
+      const isPartial = rosterEndObj && maxDateObj < rosterEndObj;
+
+      status.style.display = 'none';
+
+      const predictedGetUnsched = (d, l, i, j) => {
+        const cb = document.querySelector(`.unsched-check[data-day="${i}"][data-leg="${j}"]`);
+        return cb ? cb.checked : false;
+      };
+
+      lastReconContext = {maxDateObj, maxDateStr, predictedGetUnsched, actualDays: parsedDays, dutyTotals, isPartial, extraNote, pilotSummary};
+      renderReconComparison();
+      showToast('Compared through ' + maxDateStr);
+    } catch(err){
+      status.style.color = 'var(--danger)';
+      status.textContent = "Couldn't read this file (" + err.message + "). Send it to me in chat instead.";
+    }
+  }
+
+  function renderReconComparison(){
+    // Rebuilds the whole comparison table from scratch against the CURRENT rosterData —
+    // called on initial load AND every time an unscheduled checkbox changes, so ticking a box
+    // updates Predicted immediately instead of leaving a stale snapshot on screen.
+    if(!lastReconContext) return;
+    const {maxDateObj, maxDateStr, predictedGetUnsched, actualDays, dutyTotals, isPartial, extraNote} = lastReconContext;
+    const resultEl = document.getElementById('recon-file-result');
+    if(!resultEl) return;
+
+    const predicted = computeIncomeForDataset(rosterData, maxDateObj, predictedGetUnsched, {includeSeniority: true});
+    let actualOverrides = null;
+    if(dutyTotals){
+      let tripTimeTotal = 0, completion = 0;
+      dutyTotals.forEach(dt => {
+        const dObj = buildDateObj(dt.date, '23:59');
+        if(dObj && dObj <= maxDateObj){ tripTimeTotal += dt.tt; completion += dt.topUp; }
+      });
+      actualOverrides = {tripTimeTotal, completion};
+    }
+    const actual = computeIncomeForDataset(actualDays, maxDateObj, null, actualOverrides);
+    const pilotSummary = lastReconContext.pilotSummary;
+    if(pilotSummary){
+      // Report Pilot's totals already cover exactly the same as-of date as the rest of the
+      // file (verified: its BT/TT match summing the daily figures through the same cutoff), so
+      // these can be used directly without further date-filtering.
+      if(pilotSummary.bt != null) actual.rawBlockHours = pilotSummary.bt;
+      if(pilotSummary.tt != null) actual.tripTimeTotal = pilotSummary.tt;
+      if(pilotSummary.completion != null) actual.completion = pilotSummary.completion;
+      if(pilotSummary.incentiveBT != null) actual.totalIncentives = pilotSummary.incentiveBT;
+      // (transportDays from the summary isn't used to override flightDays — they're different
+      // counts, and conflating them was showing a confusing number under "Flight Days")
+      if(pilotSummary.perDiemDays != null) actual.perDiemUnits = pilotSummary.perDiemDays;
+      if(pilotSummary.bt != null && pilotSummary.incentiveBT != null) actual.block = pilotSummary.bt + pilotSummary.incentiveBT; // raw + incentive extra = incentive-multiplied credit
+      actual.totalCreditHours = actual.block + actual.completion; // approximate — NFA-type credits aren't separately broken out in Report Pilot
+      if(pilotSummary.totalPayment != null) actual.totalIncome = pilotSummary.totalPayment;
+    }
+    const diff = actual.totalIncome - predicted.totalIncome;
+
+    resultEl.innerHTML = `
+      <div class="help-text" style="margin-top:8px;">Comparing through <b>${maxDateStr}</b> — the latest date this file has data for${isPartial ? ' (looks like a partial-period file, not the full month — the comparison only covers up to there)' : ''}.${actual.missingCount ? ' ' + actual.missingCount + ' leg(s) in the file had no computable block hours, so the actual total may be understated.' : ''}${predicted.estimatedCount ? ' Predicted uses your Route Block-Hour Estimates for ' + predicted.estimatedCount + ' leg(s) missing real times.' : ''} Layover credit and manual Ground Activity entries aren't date-stamped, so both sides exclude them.${extraNote} The point isn't to hit ₪0 — it's to catch cases where Actual is meaningfully <i>below</i> Predicted, which can mean crew assignment missed an incentive you were owed. Actual coming in above Predicted isn't a problem worth chasing.</div>
+      <table style="width:100%; border-collapse:collapse; margin-top:10px; font-size:12.5px;">
+        <tr style="border-bottom:1px solid var(--divider);">
+          <th style="text-align:left; padding:6px 4px; color:var(--text-muted); font-weight:600;"></th>
+          <th style="text-align:right; padding:6px 4px; color:var(--text-muted); font-weight:600;">Predicted</th>
+          <th style="text-align:right; padding:6px 4px; color:var(--text-muted); font-weight:600;">Actual</th>
+        </tr>
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Block Hours</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.rawBlockHours.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.rawBlockHours.toFixed(2)}h</td></tr>
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Trip Time</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.tripTimeTotal.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.tripTimeTotal.toFixed(2)}h</td></tr>
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Completion Hours</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.completion.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.completion.toFixed(2)}h</td></tr>
+        <tr style="border-bottom:1px solid var(--divider); cursor:pointer;" onclick="showIncentiveModal()"><td style="padding:6px 4px; color:var(--accent-cyan);">Incentives <span class="mono" style="font-size:9px;">▸ tap for detail</span></td><td style="text-align:right; padding:6px 4px; color:var(--accent-cyan);" class="mono">${predicted.totalIncentives.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px; color:var(--accent-cyan);" class="mono">${actual.totalIncentives.toFixed(2)}h</td></tr>
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Flight Days</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.flightDays}</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.flightDays}</td></tr>
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Per-Diem Units</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.perDiemUnits}</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.perDiemUnits}</td></tr>
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px; font-weight:600;">Total Credit Hours</td><td style="text-align:right; padding:6px 4px; font-weight:600;" class="mono">${predicted.totalCreditHours.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px; font-weight:600;" class="mono">${actual.totalCreditHours.toFixed(2)}h</td></tr>
+        <tr><td style="padding:8px 4px; font-weight:700; color:var(--accent-cyan);">Total Income</td><td style="text-align:right; padding:8px 4px; font-weight:700; color:var(--accent-cyan);" class="mono">₪${predicted.totalIncome.toLocaleString(undefined, {maximumFractionDigits: 0})}</td><td style="text-align:right; padding:8px 4px; font-weight:700; color:var(--accent-cyan);" class="mono">₪${actual.totalIncome.toLocaleString(undefined, {maximumFractionDigits: 0})}</td></tr>
+      </table>
+      <div class="breakdown" style="margin-top:8px;">
+        <div class="brk-row"><span>Difference${diff < -50 ? ' — worth checking with crew assignment' : ''}</span><span class="val" style="color:${diff < -50 ? 'var(--danger)' : 'var(--accent-cyan)'}">${diff >= 0 ? '+' : ''}₪${diff.toLocaleString(undefined, {maximumFractionDigits: 0})}</span></div>
+      </div>`;
+  }
+
+  function countCode(code, maxDateObj, days){
+    days = days || rosterData;
+    return days.filter(d => {
+      if(d.code !== code) return false;
+      if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return false; }
+      return true;
+    }).length;
+  }
+  function countFlightDays(maxDateObj, days){
+    days = days || rosterData;
+    return days.filter(d => {
+      if(!(d.code === 'DUTY' && d.legs && d.legs.length > 0)) return false;
+      if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return false; }
+      return true;
+    }).length;
+  }
+  function countTransportUnits(maxDateObj, days){
+    // 1 unit for each calendar day the FIRST leg departs FROM home base, plus 1 unit for each
+    // calendar day the LAST leg arrives AT home base — not one unit per flight day. A same-day
+    // double round trip (TLV-RHO-TLV-LCA-TLV) is still just 2 units (out + back), and a JFK
+    // layover pairing is 2 units total (the outbound day, the return day) — the layover days
+    // in between contribute nothing.
+    days = days || rosterData;
+    let units = 0;
+    days.forEach(d => {
+      if(d.code !== 'DUTY' || !d.legs || d.legs.length === 0) return;
+      if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return; }
+      const firstLeg = d.legs[0], lastLeg = d.legs[d.legs.length - 1];
+      if(firstLeg.from === HOME) units++;
+      if(lastLeg.to === HOME) units++;
+    });
+    return units;
+  }
+  function countPerDiemUnits(maxDateObj, days){
+    // $85/unit: one unit per unique non-home, non-Eilat (ETH/ETM) destination touched on a flight day,
+    // plus one unit per layover day (even with zero flight activity that day).
+    days = days || rosterData;
+    let units = 0;
+    days.forEach(d => {
+      if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return; }
+      if(d.code === 'DUTY' && d.legs){
+        const dests = new Set();
+        d.legs.forEach(l => {
+          if(l.from && l.from !== HOME && !EXCLUDED.includes(l.from)) dests.add(l.from);
+          if(l.to && l.to !== HOME && !EXCLUDED.includes(l.to)) dests.add(l.to);
+        });
+        units += dests.size;
+      } else if(d.code === 'LAYOVER'){
+        units += 1;
+      }
+    });
+    return units;
+  }
+  const STANDBY_UNIT = 2.5, PAIDOFF_UNIT = 3, INS_UNIT = 3, CXL_UNIT = 3;
+
+  function recalcSalary(){
+    const rateH = parseFloat(document.getElementById('rate-hourly').value) || 0;
+    const rateD = parseFloat(document.getElementById('rate-perdiem').value) || 0;
+    const seniority = parseFloat(document.getElementById('seniority-value').value) || 0;
+    const fx = parseFloat(document.getElementById('fx-rate').value) || 0;
+    const rateTransport = parseFloat(document.getElementById('rate-transport').value) || 0;
+    const layoverCredit = parseFloat(document.getElementById('layover-hours').value) || 0;
+    const gaTraining = parseFloat(document.getElementById('ga-training').value) || 0;
+    const gaProject = parseFloat(document.getElementById('ga-project').value) || 0;
+    const gaSpecialCall = parseFloat(document.getElementById('ga-specialcall').value) || 0;
+    const gaCancelled = parseFloat(document.getElementById('ga-cancelled').value) || 0;
+    const gaTotal = gaTraining + gaProject + gaSpecialCall + gaCancelled;
+
+    const {block: blockCredit, completion, missingCount, estimatedCount, rawBlockHours, overageExcess, overageBonus, totalIncentives} = calcCreditBreakdown();
+    const standbyCredit = countCode('SBSM') * STANDBY_UNIT + countCode('SBSE') * STANDBY_UNIT;
+    const paidoffCredit = countCode('OFFP') * PAIDOFF_UNIT;
+    const insCredit = countCode('INS') * INS_UNIT;
+    const cxlCredit = countCode('CXL') * CXL_UNIT;
+    const nfaTotal = standbyCredit + paidoffCredit + insCredit + cxlCredit;
+    const flightDays = countFlightDays();
+    const transportUnits = countTransportUnits();
+    const perDiemUnits = countPerDiemUnits();
+    const totalCreditHours = blockCredit + overageBonus + completion + nfaTotal + gaTotal + layoverCredit;
+
+    const creditPay = totalCreditHours * rateH;
+    const transportPay = transportUnits * rateTransport;
+    const perDiemPay = perDiemUnits * rateD;
+    const perDiemILS = perDiemPay * fx;
+    const totalIncome = creditPay + seniority + transportPay + perDiemILS;
+
+    document.getElementById('brk-block').textContent = blockCredit.toFixed(2) + 'h';
+    document.getElementById('brk-overage').textContent = overageBonus.toFixed(2) + 'h';
+    document.getElementById('brk-overage-sub').textContent = rawBlockHours.toFixed(2) + 'h flown this period · ' + overageExcess.toFixed(2) + 'h above the ' + MONTHLY_BLOCK_THRESHOLD + 'h threshold';
+
+    const blockPct = Math.min(100, (rawBlockHours / MONTHLY_BLOCK_THRESHOLD) * 100);
+    document.getElementById('thresh-block-label').textContent = rawBlockHours.toFixed(2) + 'h / ' + MONTHLY_BLOCK_THRESHOLD + 'h';
+    document.getElementById('thresh-block-fill').style.width = blockPct + '%';
+    document.getElementById('thresh-block-fill').style.background = rawBlockHours > MONTHLY_BLOCK_THRESHOLD ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+    const DUTY_DAY_QUOTA = 13;
+    const dutyPct = Math.min(100, (flightDays / DUTY_DAY_QUOTA) * 100);
+    document.getElementById('thresh-duty-label').textContent = flightDays + ' / ' + DUTY_DAY_QUOTA;
+    document.getElementById('thresh-duty-fill').style.width = dutyPct + '%';
+    document.getElementById('thresh-duty-fill').style.background = flightDays > DUTY_DAY_QUOTA ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+    document.getElementById('brk-completion').textContent = completion.toFixed(2) + 'h';
+    document.getElementById('brk-standby').textContent = standbyCredit.toFixed(2) + 'h';
+    document.getElementById('brk-paidoff').textContent = paidoffCredit.toFixed(2) + 'h';
+    document.getElementById('brk-ins').textContent = insCredit.toFixed(2) + 'h';
+    document.getElementById('brk-cxl').textContent = cxlCredit.toFixed(2) + 'h';
+    document.getElementById('brk-nfa-total').textContent = nfaTotal.toFixed(2) + 'h';
+    document.getElementById('brk-ga-total').textContent = gaTotal.toFixed(2) + 'h';
+    document.getElementById('brk-credit-total').textContent = totalCreditHours.toFixed(2) + 'h';
+    document.getElementById('brk-total-incentives').textContent = totalIncentives.toFixed(2) + 'h';
+    document.getElementById('lbl-flightdays-1').textContent = transportUnits;
+    document.getElementById('lbl-perdiem-units').textContent = perDiemUnits;
+    document.getElementById('brk-transport').textContent = '₪' + transportPay.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('brk-flight').textContent = '₪' + creditPay.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('brk-seniority').textContent = '₪' + seniority.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('brk-perdiem').textContent = '$' + perDiemPay.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('brk-perdiem-ils').textContent = '₪' + perDiemILS.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('brk-total-income').textContent = '₪' + totalIncome.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('salary-total').textContent = '₪' + totalIncome.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.querySelector('.gauge-sub').textContent = totalCreditHours.toFixed(2) + ' credit hrs' + (missingCount ? ' · ' + missingCount + ' leg(s) missing block hours' : '') + (estimatedCount ? ' · ' + estimatedCount + ' leg(s) using route estimates' : '');
+
+    const reconActual = parseFloat(document.getElementById('recon-actual').value) || 0;
+    document.getElementById('recon-predicted').textContent = '₪' + totalIncome.toLocaleString(undefined,{maximumFractionDigits:0});
+    document.getElementById('recon-actual-display').textContent = '₪' + reconActual.toLocaleString(undefined,{maximumFractionDigits:0});
+    const reconDiff = reconActual - totalIncome;
+    const reconDiffEl = document.getElementById('recon-diff');
+    reconDiffEl.textContent = (reconDiff >= 0 ? '+' : '') + '₪' + reconDiff.toLocaleString(undefined,{maximumFractionDigits:0});
+    reconDiffEl.style.color = reconActual === 0 ? '' : (Math.abs(reconDiff) < 50 ? 'var(--accent-cyan)' : 'var(--danger)');
+
+    const status = document.getElementById('parse-status');
+    if(missingCount && status){
+      status.style.display = 'block';
+      status.style.color = 'var(--danger)';
+      status.textContent = missingCount + ' leg(s) have no block hours (likely a local-station-time PDF) — those count as 0 credit. Send that PDF to me in chat for an accurate parse.';
+    }
+  }
+  ['rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','layover-hours','ga-training','ga-project','ga-specialcall','ga-cancelled','recon-actual'].forEach(id=>{
+    document.getElementById(id).addEventListener('input', recalcSalary);
+  });
+  recalcSalary();
+
+  // ---- Persist reconciliation + annual-tracker fields across visits (this device only) ----
+  const PERSISTED_FIELDS = ['recon-actual','ann-dutydays','rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','flight-api-key','flight-airline-code','ftl-cap-duty7','ftl-cap-duty14','ftl-cap-duty28','ftl-cap-month','ftl-cap-3mo','ftl-cap-12mo','route-estimates','drive-time-minutes'];
+  (function loadPersistedFields(){
+    let saved = {};
+    try{ saved = JSON.parse(localStorage.getItem('crewboard-fields') || '{}'); } catch(e){}
+    PERSISTED_FIELDS.forEach(id => {
+      const el = document.getElementById(id);
+      if(el && saved[id] != null) el.value = saved[id];
+    });
+    recalcSalary();
+    renderFTL();
+  })();
+  PERSISTED_FIELDS.forEach(id => {
+    document.getElementById(id).addEventListener('input', () => {
+      let saved = {};
+      try{ saved = JSON.parse(localStorage.getItem('crewboard-fields') || '{}'); } catch(e){}
+      saved[id] = document.getElementById(id).value;
+      try{ localStorage.setItem('crewboard-fields', JSON.stringify(saved)); } catch(e){}
+      if(id.indexOf('ftl-cap-') === 0) renderFTL();
+      if(id === 'route-estimates'){ renderRoster(); recalcSalary(); }
+    });
+  });
+
+  // ---- Offline support ----
+  // Only meaningful when served over http(s) (e.g. GitHub Pages) — service workers can't
+  // register on a file:// page, which is fine since a locally opened file has no server
+  // connection to "lose" in the first place. Fails silently there rather than erroring.
+  if('serviceWorker' in navigator && location.protocol !== 'file:'){
+    window.addEventListener('load', () => {
+      navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker registration failed:', err));
+    });
+  }
+</script>
+</body>
+</html>
