@@ -852,18 +852,19 @@
 
   function activityBadge(idx){
     if(idx == null) return '';
-    return ` <span class="badge-chip" style="background:#8B6FD9; border-color:#8B6FD9; color:#ffffff;" onclick="showToast('Activity day ${idx} this month — flight, layover, and instruction days count toward this; standby and paid days off don\\'t. Day 14+ earns the veteran incentive.')">${idx}</span>`;
+    return ` <span class="badge-chip" style="background:#8B6FD9; border-color:#8B6FD9; color:#ffffff;" onclick="showToast('Activity day ${idx} this month toward the 13-day quota (Inc 6) — flight and instruction days count; layover, standby, and paid days off don\\'t. Day 14+ earns the veteran incentive.')">${idx}</span>`;
   }
 
   function computeActivityDayIndices(days){
-    // Flight (DUTY), layover, and instruction days all count as an "activity day", in order.
-    // Standby and paid-off days do NOT count. From the 14th activity day onward, that day's
-    // block credit gets an extra 1.5x incentive.
+    // Inc 6 (חריגה ממכסת 13 ימי הצבה — exceeding the 13-assignment-day quota): flight (DUTY)
+    // and instruction (INS) days count; layover does NOT. From the 14th such day onward, that
+    // day's block credit gets an extra 1.5x. This same count also drives the "Flight days this
+    // period: X/13" gauge — they're the same real rule, kept in sync deliberately.
     days = days || rosterData;
     const map = {};
     let counter = 0;
     days.forEach(d => {
-      if(d.code !== 'DUTY' && d.code !== 'LAYOVER' && d.code !== 'INS') return;
+      if(d.code !== 'DUTY' && d.code !== 'INS') return;
       if(map[d.date] === undefined){ counter++; map[d.date] = counter; }
     });
     return map;
@@ -1005,7 +1006,7 @@
         </div>`;
       } else if(d.code === 'LAYOVER'){
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s">
-          <div class="stub-head"><span>${d.label}${activityBadge(dayIndex[d.date])}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
+          <div class="stub-head"><span>${d.label}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
         </div>`;
       } else if(d.code === 'INS'){
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s; border-color:var(--text-muted);">
@@ -2293,7 +2294,7 @@
         const extra = d.flatCredit * (veteranMult - 1);
         if(extra > 0.01){
           const reasons = [];
-          if(veteranMult > 1) reasons.push('day ' + dayIndex[d.date] + ' veteran (14th+)');
+          if(veteranMult > 1) reasons.push('day ' + dayIndex[d.date] + ' veteran (14th+, Inc 6)');
           rows.push({date: d.date, day: d.day, label, hours: extra, reasons});
         }
         return;
@@ -2307,15 +2308,15 @@
         const shabbat = dayShabbat;
         const holiday = HOLIDAY_DATES.includes(d.date);
         let mult = 1;
-        if(holiday){ mult = 2; reasonSet.add('holiday (2×)'); }
-        else if(checked && shabbat){ mult = 2; reasonSet.add('unscheduled + Shabbat window'); }
-        else if(checked){ mult = 1.5; reasonSet.add('unscheduled flight'); }
+        if(holiday){ mult = 2; reasonSet.add('holiday (2×, Inc 3)'); }
+        else if(checked && shabbat){ mult = 2; reasonSet.add('unscheduled (Inc 11) + Shabbat window'); }
+        else if(checked){ mult = 1.5; reasonSet.add('unscheduled flight (Inc 11)'); }
         else if(shabbat){ mult = 1.5; reasonSet.add('Shabbat window touched'); }
         const combinedMult = Math.min(2, mult * veteranMult * secondActivityMult);
         dayExtra += l.block * (combinedMult - 1);
       });
-      if(veteranMult > 1) reasonSet.add('day ' + dayIndex[d.date] + ' veteran (14th+)');
-      if(secondActivityMult > 1) reasonSet.add('2nd flight activity same day');
+      if(veteranMult > 1) reasonSet.add('day ' + dayIndex[d.date] + ' veteran (14th+, Inc 6)');
+      if(secondActivityMult > 1) reasonSet.add('2nd flight activity same day (Inc 10)');
       if(dayExtra > 0.01) rows.push({date: d.date, day: d.day, label, hours: dayExtra, reasons: [...reasonSet]});
     });
     return rows.sort((a, b) => b.hours - a.hours);
@@ -2677,9 +2678,12 @@
     }).length;
   }
   function countFlightDays(maxDateObj, days){
+    // Inc 6's 13-day quota: DUTY (with real legs) + INS count; layover doesn't. Kept in sync
+    // with computeActivityDayIndices, which drives the 14th-day veteran multiplier — same rule.
     days = days || rosterData;
     return days.filter(d => {
-      if(!(d.code === 'DUTY' && d.legs && d.legs.length > 0)) return false;
+      const qualifies = (d.code === 'DUTY' && d.legs && d.legs.length > 0) || d.code === 'INS';
+      if(!qualifies) return false;
       if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return false; }
       return true;
     }).length;
