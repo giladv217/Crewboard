@@ -15,61 +15,127 @@
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
 <style>
   :root{
+    /* Core palette (dark = the default "glass cockpit" identity) */
     --bg-deep:#0A1420;
     --panel:#12233A;
     --panel-raised:#1C3151;
     --accent-amber:#F2A93B;
     --accent-cyan:#4FD1C5;
+    --accent-purple:#9E86E0;
     --text-primary:#EDF1F7;
     --text-muted:#8CA0BC;
     --divider:#24384F;
     --danger:#E8664F;
+    --nav-bg:rgba(18,35,58,0.92);
     --shadow-sm:0 1px 2px rgba(0,0,0,.35);
     --shadow-card:0 10px 28px -8px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.03) inset;
     --ring-cyan:0 0 0 3px rgba(79,209,197,.22);
     --ease-native:cubic-bezier(.22,1,.36,1);
+
+    /* Type scale (rem-based so OS text-size settings scale it) */
+    --fs-micro:0.6875rem;   /* 11px  - hard floor, micro labels / badges only */
+    --fs-caption:0.75rem;   /* 12px */
+    --fs-small:0.8125rem;   /* 13px */
+    --fs-body:0.9375rem;    /* 15px  - default reading size */
+    --fs-body-lg:1rem;      /* 16px */
+    --fs-title:1.125rem;    /* 18px */
+    --fs-h1:1.5rem;         /* 24px */
+    --fs-display:2.25rem;   /* 36px */
+    --lh-tight:1.25;
+    --lh-normal:1.5;
+
+    /* Spacing scale (4pt grid) */
+    --sp-1:4px; --sp-2:8px; --sp-3:12px; --sp-4:16px;
+    --sp-5:20px; --sp-6:24px; --sp-8:32px;
+
+    /* Radius scale */
+    --r-xs:6px; --r-sm:9px; --r-md:14px; --r-lg:18px; --r-pill:999px;
+
+    /* Minimum comfortable hit area */
+    --tap-min:44px;
   }
-  [data-theme="light"]{
+  /* Follow the OS setting when the user has not explicitly chosen a theme */
+  @media (prefers-color-scheme: light){
+    :root{
     --bg-deep:#F3F5F9;
     --panel:#FFFFFF;
     --panel-raised:#EEF1F6;
-    --accent-amber:#B8791F;
+    --accent-amber:#8A5A12;
     --accent-cyan:#0D8C7F;
+    --accent-purple:#5E42B8;
     --text-primary:#141B29;
     --text-muted:#5C6C83;
     --divider:#DCE3EC;
     --danger:#C6432E;
+    --nav-bg:rgba(255,255,255,0.92);
+    --shadow-sm:0 1px 2px rgba(20,27,41,.08);
+    --shadow-card:0 8px 22px -8px rgba(20,27,41,.16), 0 1px 0 rgba(255,255,255,.6) inset;
+    --ring-cyan:0 0 0 3px rgba(13,140,127,.18);
+    }
+    :root .app{background:linear-gradient(180deg,#F3F5F9 0%, #EDF1F7 100%);}
+  }
+  /* An explicit choice from Settings always wins over the OS setting */
+  [data-theme="light"]{
+    --bg-deep:#F3F5F9;
+    --panel:#FFFFFF;
+    --panel-raised:#EEF1F6;
+    --accent-amber:#8A5A12;
+    --accent-cyan:#0D8C7F;
+    --accent-purple:#5E42B8;
+    --text-primary:#141B29;
+    --text-muted:#5C6C83;
+    --divider:#DCE3EC;
+    --danger:#C6432E;
+    --nav-bg:rgba(255,255,255,0.92);
     --shadow-sm:0 1px 2px rgba(20,27,41,.08);
     --shadow-card:0 8px 22px -8px rgba(20,27,41,.16), 0 1px 0 rgba(255,255,255,.6) inset;
     --ring-cyan:0 0 0 3px rgba(13,140,127,.18);
   }
   [data-theme="light"] .app{background:linear-gradient(180deg,#F3F5F9 0%, #EDF1F7 100%);}
+  [data-theme="dark"]{
+    --bg-deep:#0A1420;
+    --panel:#12233A;
+    --panel-raised:#1C3151;
+    --accent-amber:#F2A93B;
+    --accent-cyan:#4FD1C5;
+    --accent-purple:#9E86E0;
+    --text-primary:#EDF1F7;
+    --text-muted:#8CA0BC;
+    --divider:#24384F;
+    --danger:#E8664F;
+    --nav-bg:rgba(18,35,58,0.92);
+    --shadow-sm:0 1px 2px rgba(0,0,0,.35);
+    --shadow-card:0 10px 28px -8px rgba(0,0,0,.5), 0 1px 0 rgba(255,255,255,.03) inset;
+    --ring-cyan:0 0 0 3px rgba(79,209,197,.22);
+  }
+  [data-theme="dark"] .app{background:linear-gradient(180deg,#0A1420 0%, #0D1B2E 100%);}
   *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
   html,body{margin:0;padding:0;background:var(--bg-deep);}
-  body{font-family:'IBM Plex Sans', sans-serif; color:var(--text-primary); display:flex; justify-content:center; min-height:100vh;}
-  .app{width:100%; max-width:430px; min-height:100vh; background:linear-gradient(180deg,#0A1420 0%, #0D1B2E 100%); display:flex; flex-direction:column; position:relative; overflow:hidden;}
+  html{-webkit-text-size-adjust:100%;}
+  body{font-family:'IBM Plex Sans', sans-serif; color:var(--text-primary); display:flex; justify-content:center; min-height:100vh; min-height:100dvh; font-size:var(--fs-body); line-height:var(--lh-normal);}
+  .app{width:100%; max-width:430px; min-height:100vh; min-height:100dvh; background:linear-gradient(180deg,#0A1420 0%, #0D1B2E 100%); display:flex; flex-direction:column; position:relative; overflow:hidden;}
   .mono{font-family:'IBM Plex Mono', monospace;}
   @media (prefers-reduced-motion: reduce){ *, *::before, *::after{ animation-duration:.001ms !important; animation-iteration-count:1 !important; transition-duration:.001ms !important; scroll-behavior:auto !important; } }
   button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, [tabindex]:focus-visible{ outline:none; box-shadow:var(--ring-cyan); border-radius:8px; }
 
-  header.top{padding:22px 20px 16px; border-bottom:1px solid var(--divider); display:flex; align-items:flex-start; gap:12px; position:relative;}
+  header.top{padding:calc(22px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 16px calc(20px + env(safe-area-inset-left)); border-bottom:1px solid var(--divider); display:flex; align-items:flex-start; gap:12px; position:relative;}
   header.top::after{content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:linear-gradient(90deg, transparent, var(--accent-cyan) 35%, var(--accent-amber) 65%, transparent); opacity:.55; filter:blur(.3px);}
-  .drawer-btn{background:transparent; border:none; color:var(--text-primary); font-size:22px; cursor:pointer; padding:2px 0 0; line-height:1; flex-shrink:0; -webkit-tap-highlight-color:transparent;}
+  .drawer-btn{display:inline-flex; align-items:center; justify-content:center; min-width:var(--tap-min); min-height:var(--tap-min); margin:-6px -6px -6px -8px; background:transparent; border:none; color:var(--text-primary); font-size:22px; cursor:pointer; line-height:1; flex-shrink:0; -webkit-tap-highlight-color:transparent;}
   .drawer-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1100;}
   .drawer-overlay.open{display:block;}
   .drawer-panel{position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:var(--panel); transform:translateX(-100%); transition:transform .3s var(--ease-native); z-index:1101; padding:20px; box-sizing:border-box; overflow-y:auto; box-shadow:12px 0 32px rgba(0,0,0,.4);}
   .drawer-overlay.open .drawer-panel{transform:translateX(0);}
   .drawer-title{font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary);}
-  .drawer-item{display:flex; align-items:center; gap:10px; padding:14px 8px; border-radius:10px; cursor:pointer; color:var(--text-primary); font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; -webkit-tap-highlight-color:transparent;}
+  .drawer-item{display:flex; align-items:center; gap:10px; width:100%; padding:14px 8px; min-height:var(--tap-min); border-radius:var(--r-sm); cursor:pointer; color:var(--text-primary); background:transparent; border:none; text-align:left; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; -webkit-appearance:none; appearance:none; -webkit-tap-highlight-color:transparent;}
   .drawer-item:active{background:var(--panel-raised, #1b2434);}
   .swap-mini-input{flex:1; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:8px; color:var(--text-primary); font-size:12px; box-sizing:border-box;}
   .avail-window{background:var(--panel); border:1px solid var(--divider); border-radius:12px; box-shadow:var(--shadow-sm); padding:12px 16px; margin-bottom:8px;}
   .avail-window.past{opacity:0.5;}
   .avail-window-dates{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; color:var(--text-primary);}
-  .eyebrow{font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.14em; color:var(--accent-cyan); text-transform:uppercase;}
+  .eyebrow{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); font-weight:400; letter-spacing:0.14em; color:var(--accent-cyan); text-transform:uppercase; margin:0;}
   h1.title{font-family:'Space Grotesk', sans-serif; font-size:26px; font-weight:700; margin:4px 0 0; letter-spacing:-0.01em;}
 
-  main{flex:1; overflow-y:auto; padding-bottom:90px;}
+  main{flex:1; overflow-y:auto; -webkit-overflow-scrolling:touch; padding-bottom:calc(84px + env(safe-area-inset-bottom));}
   .tab-panel{display:none; padding:18px 20px 8px; animation:fadeIn .35s var(--ease-native);}
   .tab-panel.active{display:block;}
   @keyframes fadeIn{from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);}}
@@ -81,8 +147,8 @@
   #panel-roster.edit-mode-active{border:2px solid var(--danger); border-radius:14px; padding:10px; margin:-10px -10px 0;}
   .edit-mode-banner{display:none; background:var(--danger); color:#fff; font-family:'IBM Plex Mono', monospace; font-size:11px; font-weight:600; letter-spacing:0.04em; text-align:center; padding:8px; border-radius:8px; margin-bottom:10px;}
   #panel-roster.edit-mode-active .edit-mode-banner{display:block;}
-  .badge{font-size:9.5px; padding:2px 6px; border-radius:4px; border:1px solid var(--accent-amber); color:var(--accent-amber); margin-left:4px;}
-  .badge-chip{display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; border:1px solid; font-size:9px; font-weight:700; margin-left:3px; cursor:pointer; font-family:'IBM Plex Mono', monospace; -webkit-tap-highlight-color:transparent;}
+  .badge{font-size:var(--fs-micro); padding:2px 6px; border-radius:4px; border:1px solid var(--accent-amber); color:var(--accent-amber); margin-left:4px;}
+  .badge-chip{display:inline-flex; align-items:center; justify-content:center; width:16px; height:16px; border-radius:50%; border:1px solid; font-size:10px; font-weight:700; margin-left:3px; cursor:pointer; font-family:'IBM Plex Mono', monospace; -webkit-tap-highlight-color:transparent;}
 
   .stub{background:var(--panel); border-radius:14px; border:1px solid var(--divider); box-shadow:var(--shadow-card); padding:14px 16px; position:relative; margin-bottom:10px; opacity:0; animation:flapIn .45s var(--ease-native) forwards;}
   @keyframes flapIn{0%{opacity:0; transform:translateY(8px) scaleY(0.94);} 100%{opacity:1; transform:translateY(0) scaleY(1);}}
@@ -90,7 +156,7 @@
   .stub.cxl{background:transparent; border:1px dashed var(--danger); padding:12px 16px; color:var(--text-muted); font-size:13px; display:flex; justify-content:space-between; align-items:center; opacity:0.75;}
   .stub.standby{border:1px solid var(--accent-cyan);}
   .day-edit-controls{display:flex; gap:6px; margin:-10px 0 8px;}
-  .day-edit-btn{font-family:'IBM Plex Mono', monospace; font-size:10px; padding:4px 8px; border-radius:6px; cursor:pointer; border:1px solid var(--divider); background:transparent; color:var(--text-muted);}
+  .day-edit-btn{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); padding:4px 8px; border-radius:6px; cursor:pointer; border:1px solid var(--divider); background:transparent; color:var(--text-muted);}
   .day-edit-btn.cancel{border-color:var(--danger); color:var(--danger);}
   .day-edit-btn.remove{border-color:var(--text-muted); color:var(--text-muted);}
   .stub-head{display:flex; justify-content:space-between; align-items:center; font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--text-muted); margin-bottom:8px;}
@@ -117,13 +183,13 @@
   .leg-route{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14.5px; flex:1; text-align:center;}
   .leg-time{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted); text-align:right;}
   .standby-time{font-family:'IBM Plex Mono', monospace; font-size:13px; color:var(--accent-cyan);}
-  .load-btn{display:block; width:100%; text-align:center; background:var(--accent-cyan); color:var(--bg-deep); border:none; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; padding:12px; border-radius:10px; cursor:pointer; box-sizing:border-box; box-shadow:var(--shadow-sm); transition:transform .15s var(--ease-native), box-shadow .15s var(--ease-native), opacity .15s;}
-  .load-btn:active{transform:scale(.97); opacity:.9;}
+  .load-btn, .btn{display:flex; align-items:center; justify-content:center; gap:var(--sp-2); width:100%; text-align:center; background:var(--accent-cyan); color:var(--bg-deep); border:1px solid transparent; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:var(--fs-body); line-height:var(--lh-tight); padding:13px 16px; min-height:var(--tap-min); border-radius:var(--r-sm); cursor:pointer; box-sizing:border-box; box-shadow:var(--shadow-sm); -webkit-tap-highlight-color:transparent; transition:transform .15s var(--ease-native), box-shadow .15s var(--ease-native), opacity .15s, background .15s, border-color .15s;}
+  .load-btn:active, .btn:active{transform:scale(.97); opacity:.9;}
 
   .cal-month-label{font-family:'Space Grotesk', sans-serif; font-size:15px; font-weight:600; margin:18px 0 8px; color:var(--accent-cyan);}
   .cal-month-label:first-child{margin-top:2px;}
   .cal-grid{display:grid; grid-template-columns:repeat(7,1fr); gap:5px; margin-bottom:4px;}
-  .cal-weekday{font-family:'IBM Plex Mono', monospace; font-size:9.5px; color:var(--text-muted); text-align:center; letter-spacing:0.04em; text-transform:uppercase; padding-bottom:3px;}
+  .cal-weekday{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); color:var(--text-muted); text-align:center; letter-spacing:0.04em; text-transform:uppercase; padding-bottom:3px;}
   .cal-cell{background:var(--panel); border:1px solid var(--divider); border-radius:8px; padding:5px 3px; min-height:58px; display:flex; flex-direction:column; align-items:center; gap:3px; text-align:center;}
   .cal-cell.empty{background:transparent; border-color:transparent;}
   .cal-cell.duty{border-color:var(--accent-amber);}
@@ -132,11 +198,10 @@
   .cal-cell.standby{border:1px dotted var(--accent-cyan);}
   .cal-cell.off{background:transparent; border-style:dashed;}
   .cal-date{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted);}
-  .cal-dest{font-size:9.5px; font-weight:600; line-height:1.2; display:flex; align-items:center; gap:2px; color:var(--text-primary);}
-  .cal-legend{display:flex; flex-wrap:wrap; gap:12px 16px; margin:16px 0 6px; font-size:11px; color:var(--text-muted);}
+  .cal-dest{font-size:10px; font-weight:600; line-height:1.2; display:flex; align-items:center; gap:2px; color:var(--text-primary);}
+  .cal-legend{display:flex; flex-wrap:wrap; gap:12px 16px; margin:16px 0 6px; font-size:var(--fs-caption); color:var(--text-muted);}
   .cal-legend-item{display:flex; align-items:center; gap:5px;}
   .cal-dot{width:9px; height:9px; border-radius:3px; display:inline-block; flex-shrink:0;}
-  .load-btn:active{opacity:0.85;}
   #review-panel .stub{opacity:1; animation:none;}
 
   .gauge-card{background:var(--panel); border:1px solid var(--divider); border-radius:18px; box-shadow:var(--shadow-card); padding:22px 20px; text-align:center; margin-bottom:18px; position:relative; overflow:hidden;}
@@ -144,18 +209,18 @@
   .gauge-label{font-family:'IBM Plex Mono', monospace; font-size:11px; letter-spacing:0.1em; color:var(--text-muted); text-transform:uppercase;}
   .gauge-value{font-family:'Space Grotesk', sans-serif; font-size:40px; font-weight:700; color:var(--accent-amber); margin:6px 0 2px;}
   .gauge-sub{font-size:12px; color:var(--text-muted);}
-  .thresh-row{display:flex; justify-content:space-between; align-items:baseline; font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted); margin-bottom:5px;}
+  .thresh-row{display:flex; justify-content:space-between; align-items:baseline; font-family:'IBM Plex Mono', monospace; font-size:var(--fs-caption); color:var(--text-muted); margin-bottom:5px;}
   .thresh-row b{color:var(--text-primary); font-size:13px;}
   .thresh-bar{height:8px; border-radius:4px; background:var(--panel-raised, #1b2434); overflow:hidden; margin-bottom:14px;}
   .thresh-fill{height:100%; border-radius:4px; transition:width 0.3s;}
   .next-duty-card{background:linear-gradient(135deg, var(--panel), var(--panel-raised, #1b2434)); border:1px solid var(--accent-cyan); border-radius:14px; padding:16px 18px; margin-bottom:16px;}
-  .next-duty-label{font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.1em; color:var(--accent-cyan); text-transform:uppercase; margin-bottom:6px;}
+  .next-duty-label{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); letter-spacing:0.1em; color:var(--accent-cyan); text-transform:uppercase; margin-bottom:6px;}
   .next-duty-main{font-family:'Space Grotesk', sans-serif; font-size:19px; font-weight:600; color:var(--text-primary);}
   .next-duty-sub{font-size:12.5px; color:var(--text-muted); margin-top:4px;}
   .trip-note-input{width:100%; box-sizing:border-box; margin-top:6px; background:transparent; border:1px dashed var(--divider); border-radius:8px; padding:8px 10px; font-family:'IBM Plex Sans', sans-serif; font-size:12px; color:var(--text-primary);}
   .trip-note-input::placeholder{color:var(--text-muted);}
   .collapse-section{margin-bottom:10px; border:1px solid var(--divider); border-radius:12px; overflow:hidden;}
-  .collapse-header{display:flex; justify-content:space-between; align-items:center; padding:12px 14px; cursor:pointer; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:13px; color:var(--text-primary); background:var(--panel); -webkit-tap-highlight-color:transparent;}
+  .collapse-header{display:flex; justify-content:space-between; align-items:center; width:100%; padding:12px 14px; min-height:var(--tap-min); cursor:pointer; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:var(--fs-small); text-align:left; color:var(--text-primary); background:var(--panel); border:none; -webkit-appearance:none; appearance:none; -webkit-tap-highlight-color:transparent;}
   .collapse-chevron{transition:transform 0.25s; color:var(--text-muted); font-size:12px;}
   .collapse-section.collapsed .collapse-chevron{transform:rotate(-90deg);}
   .collapse-body{max-height:3000px; overflow:hidden; transition:max-height 0.3s ease, padding 0.3s ease; padding:0 14px 14px;}
@@ -176,25 +241,25 @@
   .open-route{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:16px;}
   .open-pay{font-family:'IBM Plex Mono', monospace; color:var(--accent-cyan); font-size:13px;}
   .open-meta{font-size:12px; color:var(--text-muted); margin-bottom:12px;}
-  .req-btn{width:100%; background:transparent; border:1.5px solid var(--accent-amber); color:var(--accent-amber); font-family:'IBM Plex Mono', monospace; font-size:12.5px; letter-spacing:0.06em; text-transform:uppercase; padding:10px; border-radius:8px; cursor:pointer; transition:all .15s ease;}
+  .req-btn{display:flex; align-items:center; justify-content:center; width:100%; background:transparent; border:1.5px solid var(--accent-amber); color:var(--accent-amber); font-family:'IBM Plex Mono', monospace; font-size:12.5px; letter-spacing:0.06em; text-transform:uppercase; padding:10px 16px; min-height:var(--tap-min); border-radius:var(--r-sm); cursor:pointer; transition:all .15s ease;}
   .req-btn:active{background:var(--accent-amber); color:var(--bg-deep);}
   .req-btn.sent{border-color:var(--accent-cyan); color:var(--accent-cyan); pointer-events:none;}
-  .tag-sample{display:inline-block; font-family:'IBM Plex Mono', monospace; font-size:9.5px; letter-spacing:0.08em; color:var(--text-muted); border:1px solid var(--divider); padding:2px 6px; border-radius:4px; text-transform:uppercase; margin-bottom:12px;}
+  .tag-sample{display:inline-block; font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); letter-spacing:0.08em; color:var(--text-muted); border:1px solid var(--divider); padding:2px 6px; border-radius:4px; text-transform:uppercase; margin-bottom:12px;}
 
   .share-preview{background:var(--panel); border:1px solid var(--divider); border-radius:14px; padding:18px; margin-bottom:16px;}
   .share-preview .sp-title{font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted); letter-spacing:0.1em; text-transform:uppercase; margin-bottom:12px;}
   .sp-line{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--divider); font-size:13.5px;}
   .sp-line:last-child{border-bottom:none;}
   .sp-line .d{color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:12px; text-align:right;}
-  .share-btn{width:100%; background:var(--accent-amber); color:var(--bg-deep); border:none; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14.5px; padding:13px; border-radius:10px; cursor:pointer;}
+  .share-btn{display:flex; align-items:center; justify-content:center; width:100%; background:var(--accent-amber); color:var(--bg-deep); border:1px solid transparent; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:var(--fs-body); padding:13px 16px; min-height:var(--tap-min); border-radius:var(--r-sm); cursor:pointer;}
   .share-btn:active{opacity:0.85;}
-  .help-text{font-size:12px; color:var(--text-muted); margin-top:10px; text-align:center; line-height:1.5;}
+  .help-text{font-size:var(--fs-small); color:var(--text-muted); margin-top:10px; text-align:center; line-height:1.5;}
 
   .toast{position:absolute; bottom:96px; left:50%; transform:translateX(-50%) translateY(10px); background:var(--panel-raised); border:1px solid var(--accent-cyan); color:var(--text-primary); padding:10px 16px; border-radius:8px; font-size:12.5px; opacity:0; pointer-events:none; transition:all .25s ease; white-space:nowrap; z-index:50;}
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
-  nav.tabs{position:absolute; bottom:0; left:0; right:0; display:flex; background:rgba(18,35,58,0.92); backdrop-filter:blur(10px); border-top:1px solid var(--divider); box-shadow:0 -8px 24px -8px rgba(0,0,0,.4); padding:10px 6px calc(10px + env(safe-area-inset-bottom));}
-  .tab-btn{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:10px; letter-spacing:0.04em; padding:6px 2px; cursor:pointer; text-transform:uppercase; transition:color .2s var(--ease-native), transform .15s var(--ease-native);}
+  nav.tabs{position:absolute; bottom:0; left:0; right:0; display:flex; background:var(--nav-bg); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-top:1px solid var(--divider); box-shadow:0 -8px 24px -8px rgba(0,0,0,.4); padding:10px calc(6px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(6px + env(safe-area-inset-left));}
+  .tab-btn{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); letter-spacing:0.04em; padding:6px 2px; cursor:pointer; text-transform:uppercase; transition:color .2s var(--ease-native), transform .15s var(--ease-native);}
   .tab-btn:active{transform:scale(.92);}
   .tab-btn svg{width:20px; height:20px; stroke:var(--text-muted); fill:none; stroke-width:1.7; transition:stroke .2s var(--ease-native), filter .2s var(--ease-native);}
   .tab-btn.active{color:var(--accent-amber);}
@@ -209,16 +274,39 @@
     .breakdown, .gauge-card, .thresh-bar{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
     input{border:none !important; color:#000 !important;}
   }
+
+  /* ============================================================
+     Phase 0 / Phase 1 additions: heading reset, a11y helpers,
+     button variants (replace former inline colour overrides).
+     ============================================================ */
+  h1,h2,h3,h4,h5,h6{margin:0; font:inherit;}
+  .sr-only{position:absolute !important; width:1px; height:1px; padding:0; margin:-1px; overflow:hidden; clip:rect(0 0 0 0); white-space:nowrap; border:0;}
+  .hint{font-size:var(--fs-micro); color:var(--text-muted);}
+  .hint--plain{text-transform:none; letter-spacing:0;}
+
+  .load-btn:disabled, .btn:disabled, .share-btn:disabled, .req-btn:disabled{opacity:.5; pointer-events:none; box-shadow:none;}
+  .load-btn.v-neutral{background:var(--panel); color:var(--text-primary); border:1px solid var(--divider); box-shadow:none;}
+  .load-btn.v-cyan{background:var(--panel); color:var(--accent-cyan); border:1px solid var(--accent-cyan); box-shadow:none;}
+  .load-btn.v-amber{background:var(--panel); color:var(--accent-amber); border:1px solid var(--accent-amber); box-shadow:none;}
+  .load-btn.v-purple{background:var(--panel); color:var(--accent-purple); border:1px solid var(--accent-purple); box-shadow:none;}
+  .load-btn.v-danger{background:var(--panel); color:var(--danger); border:1px solid var(--danger); box-shadow:none;}
+  .load-btn.v-raised-cyan{background:var(--panel-raised); color:var(--accent-cyan); border:1px solid var(--accent-cyan); box-shadow:none;}
+  .load-btn.v-solid-amber{background:var(--accent-amber); color:var(--bg-deep); border:1px solid transparent;}
+  .load-btn.v-solid-purple{background:var(--accent-purple); color:var(--bg-deep); border:1px solid transparent;}
+
+  .icon-btn{display:inline-flex; align-items:center; justify-content:center; min-width:40px; min-height:40px; padding:8px; margin:-6px -6px -6px 0; background:transparent; border:none; color:var(--text-muted); font-size:16px; line-height:1; cursor:pointer; border-radius:var(--r-xs); -webkit-tap-highlight-color:transparent; flex-shrink:0;}
+  .icon-btn:hover{color:var(--text-primary);}
+  .icon-btn:active{opacity:.55;}
 </style>
 </head>
 <body>
 <div class="app">
 
   <header class="top">
-    <button class="drawer-btn" onclick="openDrawer()" aria-label="Menu">☰</button>
+    <button class="drawer-btn" type="button" onclick="openDrawer()" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false">☰</button>
     <div style="flex:1;">
       <div class="eyebrow" style="display:flex; align-items:center; gap:6px;">
-        <svg width="14" height="14" viewBox="0 0 24 24" style="flex-shrink:0;"><polygon points="12,1 15,9 24,9 17,14.5 19.5,23 12,17.8 4.5,23 7,14.5 0,9 9,9" fill="#F2A93B"/></svg>
+        <svg width="14" height="14" viewBox="0 0 24 24" style="flex-shrink:0;" aria-hidden="true"><polygon points="12,1 15,9 24,9 17,14.5 19.5,23 12,17.8 4.5,23 7,14.5 0,9 9,9" fill="#F2A93B"/></svg>
         ISRAIR · FO A320 · YOUR BASE
       </div>
       <h1 class="title" id="header-title">Roster</h1>
@@ -233,20 +321,20 @@
         <div class="next-duty-main" id="next-duty-main">Loading…</div>
         <div class="next-duty-sub" id="next-duty-sub"></div>
       </div>
-      <label for="pdf-input" class="load-btn">Load Roster (XLSX/CSV)</label>
-      <input type="file" id="pdf-input" accept="application/pdf,.pdf,.csv,text/csv,.xlsx,.xls" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
+      <button type="button" class="load-btn" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
+      <input type="file" id="pdf-input" accept="application/pdf,.pdf,.csv,text/csv,.xlsx,.xls" class="sr-only" tabindex="-1" aria-hidden="true">
       <div id="parse-status" class="help-text" style="display:none; margin-top:10px;"></div>
       <div id="review-panel" style="display:none; margin-top:14px;"></div>
-      <button class="load-btn" id="edit-mode-btn" style="background:var(--panel); border:1px solid var(--accent-cyan); color:var(--accent-cyan); margin-top:8px;" onclick="toggleEditMode()">Enter Edit Mode</button>
-      <button class="load-btn" id="check-all-btn" style="background:var(--panel); border:1px solid var(--accent-amber); color:var(--accent-amber); margin-top:8px;" onclick="checkAllMissingFlights()">Check All Missing Flights</button>
-      <button class="load-btn" id="fill-layovers-btn" style="background:var(--panel); border:1px solid #8B6FD9; color:#8B6FD9; margin-top:8px;" onclick="fillImplicitLayovers()">Fill Implied Layovers</button>
+      <button type="button" class="load-btn v-cyan" id="edit-mode-btn" style="margin-top:8px;" onclick="toggleEditMode()">Enter Edit Mode</button>
+      <button type="button" class="load-btn v-amber" id="check-all-btn" style="margin-top:8px;" onclick="checkAllMissingFlights()">Check All Missing Flights</button>
+      <button type="button" class="load-btn v-purple" id="fill-layovers-btn" style="margin-top:8px;" onclick="fillImplicitLayovers()">Fill Implied Layovers</button>
       <div id="layover-review-panel"></div>
       <div id="add-flight-form" style="display:none; margin-top:12px; border:1px solid var(--accent-cyan); border-radius:12px; padding:12px; background:var(--panel);">
-        <div class="eyebrow" style="margin-bottom:8px;">Add Flight</div>
+        <h3 class="eyebrow" style="margin-bottom:8px;">Add Flight</h3>
 
         <label style="font-family:'IBM Plex Mono', monospace; font-size:11px; color:var(--text-muted); display:block; margin-bottom:4px;">Paste WhatsApp assignment message</label>
         <textarea id="wa-paste" rows="3" placeholder="Paste the crew assignment message here…" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Sans', sans-serif; font-size:13px; resize:vertical;"></textarea>
-        <button class="load-btn" style="background:var(--panel-raised, #1b2434); border:1px solid var(--accent-cyan); color:var(--accent-cyan); margin-top:8px; margin-bottom:4px;" onclick="parseWhatsAppMessage()">Parse Message</button>
+        <button type="button" class="load-btn v-raised-cyan" style="margin-top:8px; margin-bottom:4px;" onclick="parseWhatsAppMessage()">Parse Message</button>
         <div id="wa-parse-status" class="help-text" style="display:none; margin-top:4px;"></div>
         <div class="help-text" style="margin-top:4px; margin-bottom:12px;">Best-effort — fills in what it can find (date, times, route) below so you can check and correct before adding. It won't guess block hours; you still enter those.</div>
 
@@ -264,7 +352,7 @@
           <input type="checkbox" id="af-unsched" checked><span>Unscheduled / late-notice addition (1.5×)</span>
         </label>
         <div class="help-text" style="margin-top:0; margin-bottom:10px;">Leg clock times (for Shabbat detection) are estimated from Report + cumulative block hours — an approximation, not your exact schedule.</div>
-        <button class="load-btn" onclick="submitAddFlight()">Add to Roster</button>
+        <button type="button" class="load-btn" onclick="submitAddFlight()">Add to Roster</button>
       </div>
       <div class="help-text" style="margin-top:14px; margin-bottom:16px;">Check a flight's box if it was unscheduled — its block hours count at 1.5×. Shabbat (Fri 19:00 – Sat 19:00 Israel time) is auto-detected (SHB badge) — capped at 2× if a leg is both unscheduled and Shabbat. Holiday-eve/holiday dates (HOL badge) pay flat 2×. A day's 2nd separate flight activity (2nd ACT badge) pays 1.5× — doesn't apply to one continuous multi-destination trip. From your 14th activity day onward (DUTY + LAYOVER count, standby doesn't), duty days get an extra 1.5× (red badge). Any block hours flown this period above 83h earn a further 1.5×. Cancelled flights (CXL) earn a flat 3h credit.</div>
       <div id="roster-list"></div>
@@ -283,18 +371,18 @@
       <div class="thresh-bar"><div class="thresh-fill" id="thresh-duty-fill" style="width:0%; background:var(--accent-amber);"></div></div>
 
       <div class="breakdown" style="margin-top:0;">
-        <div class="brk-row"><span>Flight block credit <span class="mono" style="font-size:9px; color:var(--text-muted);">(incl. Shabbat/holiday/day-14+/unsched/2nd-activity)</span></span><span class="val" id="brk-block">0.00h</span></div>
-        <div class="brk-row"><span>Monthly overage bonus <span class="mono" style="font-size:9px; color:var(--text-muted);">(&gt;83h flown, +0.5×/hr)</span></span><span class="val" id="brk-overage">0.00h</span></div>
-        <div class="mono" id="brk-overage-sub" style="font-size:9.5px; color:var(--text-muted); margin:-4px 0 6px;"></div>
-        <div class="brk-row"><span>Completion <span class="mono" style="font-size:9px; color:var(--text-muted);">(tops up BT+TT to 5h intl / 4h turn / 3h Eilat)</span></span><span class="val" id="brk-completion">0.00h</span></div>
+        <div class="brk-row"><span>Flight block credit <span class="mono hint">(incl. Shabbat/holiday/day-14+/unsched/2nd-activity)</span></span><span class="val" id="brk-block">0.00h</span></div>
+        <div class="brk-row"><span>Monthly overage bonus <span class="mono hint">(&gt;83h flown, +0.5×/hr)</span></span><span class="val" id="brk-overage">0.00h</span></div>
+        <div class="mono hint" id="brk-overage-sub" style="margin:-4px 0 6px;"></div>
+        <div class="brk-row"><span>Completion <span class="mono hint">(tops up BT+TT to 5h intl / 4h turn / 3h Eilat)</span></span><span class="val" id="brk-completion">0.00h</span></div>
       </div>
 
       <div class="breakdown" style="margin-top:8px; border-color:var(--accent-cyan);">
-        <div class="brk-row" style="cursor:pointer;" onclick="showSalaryIncentiveModal()"><span style="color:var(--accent-cyan); font-weight:600;">Total Incentives <span class="mono" style="font-size:9px; font-weight:400;">▸ tap for detail</span></span><span class="val" id="brk-total-incentives" style="color:var(--accent-cyan); font-weight:600;">0.00h</span></div>
+        <div class="brk-row" style="cursor:pointer;" role="button" tabindex="0" aria-label="Show incentive day breakdown" onclick="showSalaryIncentiveModal()"><span style="color:var(--accent-cyan); font-weight:600;">Total Incentives <span class="mono hint" style="font-weight:400;">▸ tap for detail</span></span><span class="val" id="brk-total-incentives" style="color:var(--accent-cyan); font-weight:600;">0.00h</span></div>
       </div>
 
       <div class="collapse-section" data-collapse-id="nfa">
-        <div class="collapse-header" onclick="toggleCollapse(this)"><span>NFA — Non-Flight Activity</span><span class="collapse-chevron">▾</span></div>
+        <button type="button" class="collapse-header" aria-expanded="true" onclick="toggleCollapse(this)"><span>NFA — Non-Flight Activity</span><span class="collapse-chevron" aria-hidden="true">▾</span></button>
         <div class="collapse-body">
           <div class="breakdown" style="margin-top:0;">
             <div class="brk-row"><span>Standby credit (2.5h each)</span><span class="val" id="brk-standby">0.00h</span></div>
@@ -307,7 +395,7 @@
       </div>
 
       <div class="collapse-section" data-collapse-id="ground">
-        <div class="collapse-header" onclick="toggleCollapse(this)"><span>Ground Activity <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(manual)</span></span><span class="collapse-chevron">▾</span></div>
+        <button type="button" class="collapse-header" aria-expanded="true" onclick="toggleCollapse(this)"><span>Ground Activity <span class="mono hint hint--plain">(manual)</span></span><span class="collapse-chevron" aria-hidden="true">▾</span></button>
         <div class="collapse-body">
           <div class="field-group">
             <label>Training / Refresher credit (h)</label>
@@ -349,18 +437,18 @@
       </div>
       <div class="help-text">Two currencies, shown separately — your credit pay is in shekels, per diem in dollars, so they're not added together. Standby/paid-off/instruction credit and flight-day count update automatically from whatever roster is loaded; layover stays a manual field since it needs cross-checking against consecutive duty days.</div>
 
-      <button class="load-btn" style="background:var(--panel); border:1px solid var(--divider); color:var(--text-primary); margin-top:6px;" onclick="window.print()">Print / Save as PDF</button>
+      <button type="button" class="load-btn v-neutral" style="margin-top:6px;" onclick="window.print()">Print / Save as PDF</button>
 
       <div class="collapse-section" data-collapse-id="reconcile">
-        <div class="collapse-header" onclick="toggleCollapse(this)"><span>Reconcile vs. Real Payslip</span><span class="collapse-chevron">▾</span></div>
+        <button type="button" class="collapse-header" aria-expanded="true" onclick="toggleCollapse(this)"><span>Reconcile vs. Real Payslip</span><span class="collapse-chevron" aria-hidden="true">▾</span></button>
         <div class="collapse-body">
           <div class="help-text" style="margin-top:0;">Load your mid-month or end-of-month actual-times file — if it only covers half the period, the comparison automatically limits itself to whatever dates the file actually shows, instead of assuming the full month. This isn't about getting ₪0 difference — it's an audit tool: if Actual comes in below Predicted, that can mean crew assignment missed an incentive you were owed, worth double-checking with them.</div>
-          <label for="recon-file-input" class="load-btn" style="background:var(--panel-raised, #1b2434); border:1px solid var(--accent-cyan); color:var(--accent-cyan);">Load Fanfare</label>
-          <input type="file" id="recon-file-input" accept=".csv,.xlsx,.xls" style="position:absolute; width:1px; height:1px; opacity:0; overflow:hidden;">
+          <button type="button" class="load-btn v-raised-cyan" onclick="document.getElementById('recon-file-input').click()">Load Fanfare</button>
+          <input type="file" id="recon-file-input" accept=".csv,.xlsx,.xls" class="sr-only" tabindex="-1" aria-hidden="true">
           <div id="recon-file-status" class="help-text" style="display:none; margin-top:8px;"></div>
           <div id="recon-file-result"></div>
 
-          <div class="eyebrow" style="margin-top:18px; margin-bottom:4px;">Or Enter Manually</div>
+          <h3 class="eyebrow" style="margin-top:18px; margin-bottom:4px;">Or Enter Manually</h3>
           <div class="field-group">
             <label>Actual Total Income (₪, from real payslip)</label>
             <div class="input-wrap"><span>₪</span><input type="number" id="recon-actual" step="1" placeholder="0"></div>
@@ -380,12 +468,12 @@
     </section>
 
     <section class="tab-panel" id="panel-share">
-      <div class="eyebrow" style="margin-bottom:8px;">Family Calendar (Image)</div>
+      <h2 class="eyebrow" style="margin-bottom:8px;">Family Calendar (Image)</h2>
       <button class="load-btn" onclick="generateFamilyImage()">Generate Calendar Image</button>
       <div id="family-image-container" style="margin-top:12px;"></div>
       <div class="help-text" style="margin-top:10px; margin-bottom:16px;">A calendar picture with just Report/Debrief times and Home/Away — no duty codes, no pay details. Save it or share it straight from your photos.</div>
 
-      <div class="eyebrow" style="margin-bottom:8px;">Text Summary</div>
+      <h2 class="eyebrow" style="margin-bottom:8px;">Text Summary</h2>
       <div class="share-preview">
         <div class="sp-title">What your family sees</div>
         <div class="sp-line"><span>Sep 10 → 12</span><span class="d">Home base → ZZZ<br>(2 nights)</span></div>
@@ -398,12 +486,12 @@
     </section>
 
     <section class="tab-panel" id="panel-settings">
-      <div class="eyebrow" style="margin-bottom:8px;">Appearance</div>
-      <button class="load-btn" id="theme-toggle-btn" onclick="toggleTheme()" style="background:var(--panel-raised); border:1px solid var(--divider); color:var(--text-primary);">☀️ Light</button>
+      <h2 class="eyebrow" style="margin-bottom:8px;">Appearance</h2>
+      <button type="button" class="load-btn v-neutral" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Theme: Dark</button>
 
-      <div class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Pay Rates</div>
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Pay Rates</h2>
       <div class="field-group">
-        <label>Hourly Rate (₪/credit hr) <span class="mono" style="font-size:9px; color:var(--text-muted);">(base + CPI + seniority row, from your payslip)</span></label>
+        <label>Hourly Rate (₪/credit hr) <span class="mono hint">(base + CPI + seniority row, from your payslip)</span></label>
         <div class="input-wrap"><span>₪</span><input type="number" id="rate-hourly" value="0" step="1"></div>
       </div>
       <div class="field-group">
@@ -425,7 +513,7 @@
       <div class="help-text" style="margin-top:-8px;">1 unit for each day your first leg departs FROM home base, plus 1 unit for each day your last leg arrives AT home base. A same-day round trip earns 2 (out + back); a multi-day layover pairing also earns 2 total (the outbound day, the return day) — the layover days themselves earn nothing.</div>
       <div class="help-text">These rates are saved on this device and apply to every roster period until you change them here.</div>
 
-      <div class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Flight Tracker <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(for the 🔍 Check Actual button on the Roster tab)</span></div>
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Flight Tracker <span class="mono hint hint--plain">(for the 🔍 Check Actual button on the Roster tab)</span></h2>
       <div class="field-group">
         <label>AviationStack API Key</label>
         <div class="input-wrap"><input type="text" id="flight-api-key" placeholder="paste your key"></div>
@@ -436,20 +524,20 @@
       </div>
       <div class="help-text" style="margin-top:0;">Uses AviationStack's free tier. Two real limits worth knowing: it typically only has data for very recent/current flights, not older historical dates — and it's queried over plain HTTP, not HTTPS, so it may fail on stricter networks. Always check the date/route it returns actually matches before trusting the result — it can return a different day's flight under the same number.</div>
 
-      <div class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Commute <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(used on the family calendar image)</span></div>
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Commute <span class="mono hint hint--plain">(used on the family calendar image)</span></h2>
       <div class="field-group">
         <label>Driving time to the airport, one way (minutes)</label>
         <div class="input-wrap"><input type="number" id="drive-time-minutes" value="0" step="5"></div>
       </div>
       <div class="help-text" style="margin-top:0;">The Share tab's family calendar image will show when you actually leave and get home, not just your report/debrief times.</div>
 
-      <div class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Route Block-Hour Estimates <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(fills in flights missing real times)</span></div>
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Route Block-Hour Estimates <span class="mono hint hint--plain">(fills in flights missing real times)</span></h2>
       <div class="help-text" style="margin-top:0;">Future/unflown legs have no real time data yet, so they show blank. One line per route, e.g. <span class="mono">TLV-BUD: 3.4</span> — any leg missing real block hours will use this as an estimate instead, clearly marked as estimated rather than confirmed. Direction matters if it differs (winds etc.) — add both TLV-BUD and BUD-TLV separately if needed.</div>
       <textarea id="route-estimates" rows="12" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:12px;" placeholder="TLV-BUD: 3.4&#10;BUD-TLV: 3.6&#10;TLV-JFK: 12.1&#10;JFK-TLV: 11.3"></textarea>
     </section>
 
     <section class="tab-panel" id="panel-swap">
-      <div class="eyebrow" style="margin-bottom:4px;">Swap Requests <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(manual for now)</span></div>
+      <h2 class="eyebrow" style="margin-bottom:4px;">Swap Requests <span class="mono hint hint--plain">(manual for now)</span></h2>
       <div class="help-text" style="margin-top:0;">Track a trip you'd like to swap — who might be relevant, and where it stands. Once server access is available, this is where a real crew-matching feed would plug in instead of manual entry.</div>
       <div class="field-group"><label>Date (DD/MM)</label><div class="input-wrap"><input type="text" id="swap-date" placeholder="19/09"></div></div>
       <div class="field-group"><label>Route / Trip</label><div class="input-wrap"><input type="text" id="swap-route" placeholder="TLV-ATH-TLV"></div></div>
@@ -459,7 +547,7 @@
     </section>
 
     <section class="tab-panel" id="panel-availability">
-      <div class="eyebrow" style="margin-bottom:4px;">Available Windows</div>
+      <h2 class="eyebrow" style="margin-bottom:4px;">Available Windows</h2>
       <div class="help-text" style="margin-top:0;">Every individual day on your loaded roster with no duty, layover, standby, or instruction — so you can tell at a glance whether a specific date is open for a private event. Standby counts as unavailable even if never activated, since you could still get called in.</div>
       <div id="next-available-card" class="next-duty-card" style="border-color:var(--accent-cyan);">
         <div class="next-duty-label" style="color:var(--accent-cyan);">Next Available Day</div>
@@ -470,10 +558,10 @@
     </section>
 
     <section class="tab-panel" id="panel-ftl">
-      <div class="eyebrow" style="margin-bottom:4px;">FTL Limits <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(estimated from your loaded roster only)</span></div>
+      <h2 class="eyebrow" style="margin-bottom:4px;">FTL Limits <span class="mono hint hint--plain">(estimated from your loaded roster only)</span></h2>
       <div class="help-text" style="margin-top:0;">Not a substitute for your airline's official FTL system — this only sees whatever roster is currently loaded. If that roster doesn't fully cover a lookback window (e.g. you loaded this period only a few days ago), the numbers below are undercounted, not necessarily your real total.</div>
 
-      <div class="eyebrow" style="margin-top:16px; margin-bottom:4px;">Rolling Duty Time</div>
+      <h3 class="eyebrow" style="margin-top:16px; margin-bottom:4px;">Rolling Duty Time</h3>
       <div class="thresh-row"><span>Last 7 days</span><b id="ftl-duty7-label">0.00h</b></div>
       <div class="thresh-bar"><div class="thresh-fill" id="ftl-duty7-fill" style="width:0%; background:var(--accent-cyan);"></div></div>
       <div class="thresh-row"><span>Last 14 days</span><b id="ftl-duty14-label">0.00h</b></div>
@@ -481,7 +569,7 @@
       <div class="thresh-row"><span>Last 28 days</span><b id="ftl-duty28-label">0.00h</b></div>
       <div class="thresh-bar"><div class="thresh-fill" id="ftl-duty28-fill" style="width:0%; background:var(--accent-cyan);"></div></div>
 
-      <div class="eyebrow" style="margin-top:16px; margin-bottom:4px;">Rolling Flight Time (Block Hours)</div>
+      <h3 class="eyebrow" style="margin-top:16px; margin-bottom:4px;">Rolling Flight Time (Block Hours)</h3>
       <div class="thresh-row"><span>This calendar month</span><b id="ftl-fh-month-label">0.00h</b></div>
       <div class="thresh-bar"><div class="thresh-fill" id="ftl-fh-month-fill" style="width:0%; background:var(--accent-amber);"></div></div>
       <div class="thresh-row"><span>Last 3 months</span><b id="ftl-fh-3mo-label">0.00h</b></div>
@@ -489,7 +577,7 @@
       <div class="thresh-row"><span>Last 12 months</span><b id="ftl-fh-12mo-label">0.00h</b></div>
       <div class="thresh-bar"><div class="thresh-fill" id="ftl-fh-12mo-fill" style="width:0%; background:var(--accent-amber);"></div></div>
 
-      <div class="eyebrow" style="margin-top:16px; margin-bottom:8px;">Your Limits <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(optional — enter your real regulatory caps to see % used instead of just raw hours)</span></div>
+      <h3 class="eyebrow" style="margin-top:16px; margin-bottom:8px;">Your Limits <span class="mono hint hint--plain">(optional — enter your real regulatory caps to see % used instead of just raw hours)</span></h3>
       <div class="field-group"><label>7-day duty cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-duty7" step="1" placeholder="e.g. 60"></div></div>
       <div class="field-group"><label>14-day duty cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-duty14" step="1" placeholder="e.g. 110"></div></div>
       <div class="field-group"><label>28-day duty cap (h)</label><div class="input-wrap"><input type="number" id="ftl-cap-duty28" step="1" placeholder="e.g. 190"></div></div>
@@ -499,7 +587,7 @@
     </section>
 
     <section class="tab-panel" id="panel-whatif">
-      <div class="eyebrow" style="margin-bottom:4px;">What If</div>
+      <h2 class="eyebrow" style="margin-bottom:4px;">What If</h2>
       <div class="help-text" style="margin-top:0;">See exactly what a new flight would do to your predicted salary before you accept it. Uses the same engine as the rest of the app, so the numbers match everywhere else. If you already had a flight scheduled that date, this replaces it — it doesn't add on top.</div>
 
       <div class="field-group"><label>Date (DD/MM)</label><div class="input-wrap"><input type="text" id="wi-date" placeholder="19/09"></div></div>
@@ -524,7 +612,7 @@
     </section>
 
     <section class="tab-panel" id="panel-annual">
-      <div class="eyebrow" style="margin-bottom:4px;">Annual Cumulative <span class="mono" style="font-size:9px; color:var(--text-muted); text-transform:none;">(from "מצטבר שנתי")</span></div>
+      <h2 class="eyebrow" style="margin-bottom:4px;">Annual Cumulative <span class="mono hint hint--plain">(from "<span lang="he" dir="rtl">מצטבר שנתי</span>")</span></h2>
       <div class="field-group">
         <label>Duty/assignment days (year)</label>
         <div class="input-wrap"><input type="number" id="ann-dutydays" step="1" placeholder="0"></div>
@@ -534,39 +622,39 @@
   </main>
 
   <div class="crew-modal-overlay" id="crew-modal-overlay" onclick="if(event.target===this) closeCrewModal()">
-    <div class="crew-modal" id="crew-modal-body"></div>
+    <div class="crew-modal" id="crew-modal-body" role="dialog" aria-modal="true" tabindex="-1"></div>
   </div>
 
   <div class="crew-modal-overlay" id="incentive-modal-overlay" onclick="if(event.target===this) closeIncentiveModal()">
-    <div class="crew-modal" id="incentive-modal-body"></div>
+    <div class="crew-modal" id="incentive-modal-body" role="dialog" aria-modal="true" tabindex="-1"></div>
   </div>
 
   <div class="drawer-overlay" id="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
-    <div class="drawer-panel">
-      <div class="drawer-title"><span>Menu</span><span style="cursor:pointer; color:var(--text-muted); padding:4px;" onclick="closeDrawer()">✕</span></div>
-      <div class="drawer-item" onclick="switchTab('settings'); closeDrawer();">⚙️ Settings</div>
-      <div class="drawer-item" onclick="switchTab('swap'); closeDrawer();">🔄 Swap Requests</div>
-      <div class="drawer-item" onclick="switchTab('availability'); closeDrawer();">🟢 Available Windows</div>
-      <div class="drawer-item" onclick="switchTab('ftl'); closeDrawer();">📊 FTL Limits</div>
-      <div class="drawer-item" onclick="switchTab('whatif'); closeDrawer();">🔮 What If</div>
-      <div class="drawer-item" onclick="switchTab('annual'); closeDrawer();">📅 Annual Cumulative</div>
+    <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1">
+      <h2 class="drawer-title"><span>Menu</span><button type="button" class="icon-btn" onclick="closeDrawer()" aria-label="Close menu">✕</button></h2>
+      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('settings');">⚙️ Settings</button>
+      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('swap');">🔄 Swap Requests</button>
+      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('availability');">🟢 Available Windows</button>
+      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('ftl');">📊 FTL Limits</button>
+      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('whatif');">🔮 What If</button>
+      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('annual');">📅 Annual Cumulative</button>
     </div>
   </div>
 
-  <div class="toast" id="toast"></div>
+  <div class="toast" id="toast" role="status" aria-live="polite" aria-atomic="true"></div>
 
   <nav class="tabs">
-    <button class="tab-btn active" data-tab="roster" onclick="switchTab('roster')">
-      <svg viewBox="0 0 24 24"><path d="M4 19h16M6 15h12M8 11h8M10 7h4"/></svg>Roster
+    <button class="tab-btn active" type="button" data-tab="roster" onclick="switchTab('roster')">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><path d="M4 19h16M6 15h12M8 11h8M10 7h4"/></svg>Roster
     </button>
-    <button class="tab-btn" data-tab="salary" onclick="switchTab('salary')">
-      <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Salary
+    <button class="tab-btn" type="button" data-tab="salary" onclick="switchTab('salary')">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>Salary
     </button>
-    <button class="tab-btn" data-tab="calendar" onclick="switchTab('calendar')">
-      <svg viewBox="0 0 24 24"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar
+    <button class="tab-btn" type="button" data-tab="calendar" onclick="switchTab('calendar')">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg>Calendar
     </button>
-    <button class="tab-btn" data-tab="share" onclick="switchTab('share')">
-      <svg viewBox="0 0 24 24"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.8l7.4-3.6M8.3 13.2l7.4 3.6"/></svg>Share
+    <button class="tab-btn" type="button" data-tab="share" onclick="switchTab('share')">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.8l7.4-3.6M8.3 13.2l7.4 3.6"/></svg>Share
     </button>
   </nav>
 </div>
@@ -586,10 +674,24 @@
     const btn = document.querySelector('.tab-btn[data-tab="'+name+'"]');
     if(btn) btn.classList.add('active');
     document.getElementById('header-title').textContent = titles[name];
+    document.querySelectorAll('.tab-btn').forEach(b=>b.setAttribute('aria-selected', b.getAttribute('data-tab')===name ? 'true' : 'false'));
+    const _panel = document.getElementById('panel-'+name);
+    if(_panel && _panel.focus){ try{ _panel.focus({preventScroll:true}); }catch(e){ _panel.focus(); } }
   }
 
-  function openDrawer(){ document.getElementById('drawer-overlay').classList.add('open'); }
-  function closeDrawer(){ document.getElementById('drawer-overlay').classList.remove('open'); }
+  function openDrawer(){
+    const ov = document.getElementById('drawer-overlay');
+    ov.classList.add('open');
+    const b = document.querySelector('.drawer-btn'); if(b) b.setAttribute('aria-expanded','true');
+    if(window.setBackgroundInert) setBackgroundInert(true);
+    if(window.trapFocus) trapFocus(ov.querySelector('.drawer-panel'));
+  }
+  function closeDrawer(restore){
+    document.getElementById('drawer-overlay').classList.remove('open');
+    const b = document.querySelector('.drawer-btn'); if(b) b.setAttribute('aria-expanded','false');
+    if(window.setBackgroundInert) setBackgroundInert(false);
+    if(window.releaseFocus) releaseFocus(restore);
+  }
 
   // ---- Swipe between tabs ----
   (function initSwipe(){
@@ -744,7 +846,7 @@
 
     const dataUrl = canvas.toDataURL('image/jpeg', 0.92);
     const container = document.getElementById('family-image-container');
-    container.innerHTML = `<img id="family-image-el" src="${dataUrl}" style="width:100%; border-radius:10px; border:1px solid var(--divider);">
+    container.innerHTML = `<img id="family-image-el" alt="Your roster as a month calendar showing report and debrief times and home or away for each day" src="${dataUrl}" style="width:100%; border-radius:10px; border:1px solid var(--divider);">
       <button class="load-btn" id="family-save-btn" style="margin-top:8px;" onclick="saveFamilyImage()">Save / Share Image</button>
       <div class="help-text" style="margin-top:8px;">If the button doesn't open a save option, press and hold the image above and choose "Save Image" — that always works.</div>`;
 
@@ -852,19 +954,18 @@
 
   function activityBadge(idx){
     if(idx == null) return '';
-    return ` <span class="badge-chip" style="background:#8B6FD9; border-color:#8B6FD9; color:#ffffff;" onclick="showToast('Activity day ${idx} this month toward the 13-day quota (Inc 6) — flight and instruction days count; layover, standby, and paid days off don\\'t. Day 14+ earns the veteran incentive.')">${idx}</span>`;
+    return ` <span class="badge-chip" role="img" aria-label="Activity day ${idx} of the period" style="background:var(--accent-purple); border-color:var(--accent-purple); color:var(--bg-deep);" onclick="showToast('Activity day ${idx} this month — flight, layover, and instruction days count toward this; standby and paid days off don\\'t. Day 14+ earns the veteran incentive.')">${idx}</span>`;
   }
 
   function computeActivityDayIndices(days){
-    // Inc 6 (חריגה ממכסת 13 ימי הצבה — exceeding the 13-assignment-day quota): flight (DUTY)
-    // and instruction (INS) days count; layover does NOT. From the 14th such day onward, that
-    // day's block credit gets an extra 1.5x. This same count also drives the "Flight days this
-    // period: X/13" gauge — they're the same real rule, kept in sync deliberately.
+    // Flight (DUTY), layover, and instruction days all count as an "activity day", in order.
+    // Standby and paid-off days do NOT count. From the 14th activity day onward, that day's
+    // block credit gets an extra 1.5x incentive.
     days = days || rosterData;
     const map = {};
     let counter = 0;
     days.forEach(d => {
-      if(d.code !== 'DUTY' && d.code !== 'INS') return;
+      if(d.code !== 'DUTY' && d.code !== 'LAYOVER' && d.code !== 'INS') return;
       if(map[d.date] === undefined){ counter++; map[d.date] = counter; }
     });
     return map;
@@ -970,9 +1071,9 @@
       }
       if(d.code === 'DUTY'){
         const idx = dayIndex[d.date];
-        const veteranBadge = idx >= 14 ? ` <span class="badge-chip" style="border-color:var(--danger);color:var(--danger)" onclick="showToast('Day ${idx} of activity (14th+) — 1.5x incentive')">V</span>` : '';
-        const holidayBadge = HOLIDAY_DATES.includes(d.date) ? ` <span class="badge-chip" style="border-color:var(--accent-amber);color:var(--accent-amber)" onclick="showToast('Holiday date — flat 2x block credit')">H</span>` : '';
-        const secondActBadge = sameDayRank[i] >= 1 ? ` <span class="badge-chip" style="border-color:var(--accent-cyan);color:var(--accent-cyan)" onclick="showToast('2nd separate flight activity this calendar day — 1.5x')">2</span>` : '';
+        const veteranBadge = idx >= 14 ? ` <span class="badge-chip" role="img" aria-label="Veteran incentive day (14th activity day or later)" style="border-color:var(--danger);color:var(--danger)" onclick="showToast('Day ${idx} of activity (14th+) — 1.5x incentive')">V</span>` : '';
+        const holidayBadge = HOLIDAY_DATES.includes(d.date) ? ` <span class="badge-chip" role="img" aria-label="Holiday — flat double block credit" style="border-color:var(--accent-amber);color:var(--accent-amber)" onclick="showToast('Holiday date — flat 2x block credit')">H</span>` : '';
+        const secondActBadge = sameDayRank[i] >= 1 ? ` <span class="badge-chip" role="img" aria-label="Second separate flight activity this day" style="border-color:var(--accent-cyan);color:var(--accent-cyan)" onclick="showToast('2nd separate flight activity this calendar day — 1.5x')">2</span>` : '';
         const dayShabbat = isShabbatDay(d);
         const estimates = getRouteEstimates();
         const resolvedLegs = d.legs.map(l => resolveLegBlock(l, estimates));
@@ -981,7 +1082,7 @@
         const dayTotalBlock = knownLegs.reduce((s, r) => s + r.block, 0);
         const totalLabel = (knownLegs.length === d.legs.length ? dayTotalBlock.toFixed(2) + 'h' : (knownLegs.length ? dayTotalBlock.toFixed(2) + 'h+' : '—')) + (anyEstimated ? ' (est.)' : '');
         html += `<div class="stub" style="animation-delay:${i*0.02}s">
-          <div class="stub-head"><span>Report <b>${d.report}</b></span><span>Debrief <b>${d.debrief}</b> · <b style="color:${anyEstimated ? 'var(--accent-amber)' : 'var(--accent-cyan)'}">${totalLabel}</b>${d.indicator ? ' <span class=\"badge\">'+d.indicator+'</span>' : ''}${activityBadge(idx)}${veteranBadge}${holidayBadge}${secondActBadge}<button class="crew-btn${d.crew && d.crew.length ? ' has-crew' : ''}" onclick="showCrewModal(${i})" title="Crew">👥</button></span></div>`;
+          <div class="stub-head"><span>Report <b>${d.report}</b></span><span>Debrief <b>${d.debrief}</b> · <b style="color:${anyEstimated ? 'var(--accent-amber)' : 'var(--accent-cyan)'}">${totalLabel}</b>${d.indicator ? ' <span class=\"badge\">'+d.indicator+'</span>' : ''}${activityBadge(idx)}${veteranBadge}${holidayBadge}${secondActBadge}<button class="crew-btn${d.crew && d.crew.length ? ' has-crew' : ''}" onclick="showCrewModal(${i})" title="Crew" aria-label="Crew list for ${d.day} ${d.date}">👥</button></span></div>`;
         d.legs.forEach((l, j) => {
           const shabbat = dayShabbat;
           const resolved = resolvedLegs[j];
@@ -993,7 +1094,7 @@
               <input type="checkbox" class="unsched-check" data-day="${i}" data-leg="${j}" ${l.unschedDefault ? 'checked' : ''} onchange="recalcSalary(); renderReconComparison();">
               <span class="cbox"></span>
             </label>
-            <span class="leg-flt">${l.flt} [${l.ac}]</span><span class="leg-route">${l.from} → ${l.to}</span><span class="leg-time">${l.time == null ? '<span class=\"mono\" style=\"color:var(--danger)\">no time</span>' : l.time}${blockTag}${shabbat ? ` <span class=\"badge-chip\" style=\"border-color:var(--accent-cyan);color:var(--accent-cyan)\" onclick=\"showToast('Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time) — whole day gets the incentive')\">S</span>` : ''}<button class="crew-btn" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times">🔍</button></span></div>`;
+            <span class="leg-flt">${l.flt} [${l.ac}]</span><span class="leg-route">${l.from} → ${l.to}</span><span class="leg-time">${l.time == null ? '<span class=\"mono\" style=\"color:var(--danger)\">no time</span>' : l.time}${blockTag}${shabbat ? ` <span class=\"badge-chip\" role=\"img\" aria-label=\"Shabbat window touched\" style=\"border-color:var(--accent-cyan);color:var(--accent-cyan)\" onclick=\"showToast('Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time) — whole day gets the incentive')\">S</span>` : ''}<button class="crew-btn" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times" aria-label="Check actual times for flight ${l.flt}">🔍</button></span></div>`;
         });
         html += `<input type="text" class="trip-note-input" data-date="${d.date}" placeholder="Note for this trip (passport, uniform, etc.)" value="${(getTripNote(d.date) || '').replace(/"/g,'&quot;')}" onchange="saveTripNote('${d.date}', this.value)">`;
         html += `</div>`;
@@ -1006,7 +1107,7 @@
         </div>`;
       } else if(d.code === 'LAYOVER'){
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s">
-          <div class="stub-head"><span>${d.label}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
+          <div class="stub-head"><span>${d.label}${activityBadge(dayIndex[d.date])}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
         </div>`;
       } else if(d.code === 'INS'){
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s; border-color:var(--text-muted);">
@@ -1253,26 +1354,39 @@
   renderCalendar();
 
   // ---- Edit Mode: cancel / remove / add flight ----
-  // ---- Theme toggle (light/dark), persisted ----
-  function applyTheme(theme){
-    if(theme === 'light'){
-      document.documentElement.setAttribute('data-theme', 'light');
-      document.getElementById('theme-toggle-btn').textContent = '🌙 Dark';
-    } else {
-      document.documentElement.removeAttribute('data-theme');
-      document.getElementById('theme-toggle-btn').textContent = '☀️ Light';
+  // ---- Theme: auto (follow OS) / light / dark, persisted ----
+  function systemPrefersLight(){ return !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: light)').matches); }
+  function effectiveTheme(pref){ return (pref === 'light' || pref === 'dark') ? pref : (systemPrefersLight() ? 'light' : 'dark'); }
+  function getThemePref(){
+    try{ return localStorage.getItem('crewboard-theme') || 'dark'; }catch(e){ return 'dark'; }
+  }
+  function applyTheme(pref){
+    if(pref === 'light') document.documentElement.setAttribute('data-theme', 'light');
+    else if(pref === 'dark') document.documentElement.setAttribute('data-theme', 'dark');
+    else document.documentElement.removeAttribute('data-theme');
+    const btn = document.getElementById('theme-toggle-btn');
+    if(btn){
+      const label = pref === 'light' ? '☀️ Theme: Light' : pref === 'dark' ? '🌙 Theme: Dark' : '🌗 Theme: Auto';
+      btn.textContent = label;
+      btn.setAttribute('aria-label', 'Change theme, currently ' + (pref === 'auto' ? 'automatic' : pref));
     }
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if(meta) meta.setAttribute('content', effectiveTheme(pref) === 'light' ? '#F3F5F9' : '#0B1626');
   }
   function toggleTheme(){
-    const current = document.documentElement.getAttribute('data-theme') === 'light' ? 'light' : 'dark';
-    const next = current === 'light' ? 'dark' : 'light';
+    const order = ['auto', 'light', 'dark'];
+    const next = order[(order.indexOf(getThemePref()) + 1) % order.length];
     applyTheme(next);
-    try{ localStorage.setItem('crewboard-theme', next); } catch(e){}
+    try{ localStorage.setItem('crewboard-theme', next); }catch(e){}
   }
   (function initTheme(){
-    let saved = 'dark';
-    try{ saved = localStorage.getItem('crewboard-theme') || 'dark'; } catch(e){}
-    applyTheme(saved);
+    applyTheme(getThemePref());
+    if(window.matchMedia){
+      const mq = window.matchMedia('(prefers-color-scheme: light)');
+      const onChange = function(){ if(getThemePref() === 'auto') applyTheme('auto'); };
+      if(mq.addEventListener) mq.addEventListener('change', onChange);
+      else if(mq.addListener) mq.addListener(onChange);
+    }
   })();
 
   // ---- Collapsible Salary sections ----
@@ -1283,9 +1397,10 @@
     const section = headerEl.parentElement;
     const id = section.getAttribute('data-collapse-id');
     const collapsed = section.classList.toggle('collapsed');
+    if(headerEl.setAttribute) headerEl.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     const state = getCollapseState();
     state[id] = collapsed;
-    try{ localStorage.setItem('crewboard-collapse', JSON.stringify(state)); } catch(e){}
+    try{ localStorage.setItem('crewboard-collapse', JSON.stringify(state)); }catch(e){}
   }
   (function initCollapseState(){
     const state = getCollapseState();
@@ -1294,6 +1409,8 @@
       const id = sec.getAttribute('data-collapse-id');
       const collapsed = state[id] !== undefined ? state[id] : DEFAULT_COLLAPSED[id];
       if(collapsed) sec.classList.add('collapsed');
+      const hdr = sec.querySelector('.collapse-header');
+      if(hdr) hdr.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
     });
   })();
 
@@ -1304,7 +1421,7 @@
     const overlay = document.getElementById('crew-modal-overlay');
     const body = document.getElementById('crew-modal-body');
     const crew = d.crew || [];
-    let html = `<div class="crew-modal-title"><span>Crew — ${d.day} ${d.date}</span><span style="cursor:pointer; color:var(--text-muted); padding:4px;" onclick="closeCrewModal()">✕</span></div>`;
+    let html = `<h2 class="crew-modal-title"><span>Crew — ${d.day} ${d.date}</span><button type="button" class="icon-btn" onclick="closeCrewModal()" aria-label="Close">✕</button></h2>`;
     if(editMode){
       const text = crew.map(c => c.name + (c.position ? ' - ' + c.position : '')).join('\n');
       html += `<textarea id="crew-edit-text" rows="6" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Sans', sans-serif; font-size:13px;" placeholder="One per line: Name - Position">${text}</textarea>
@@ -1316,10 +1433,12 @@
       html += crew.map(c => `<div class="crew-row"><span>${c.name}</span><span class="crew-pos">${c.position || ''}</span></div>`).join('');
     }
     body.innerHTML = html;
-    overlay.classList.add('open');
+    if(window.openOverlayModal) openOverlayModal('crew-modal-overlay', 'crew-modal-body', 'Crew — ' + d.day + ' ' + d.date);
+    else overlay.classList.add('open');
   }
   function closeCrewModal(){
-    document.getElementById('crew-modal-overlay').classList.remove('open');
+    if(window.closeOverlayModal) closeOverlayModal('crew-modal-overlay', 'crew-modal-body');
+    else document.getElementById('crew-modal-overlay').classList.remove('open');
   }
   function saveCrewForDay(i){
     const text = document.getElementById('crew-edit-text').value;
@@ -1350,13 +1469,14 @@
     const rows = computeIncentiveDetail(rosterData, null, liveGetUnsched);
     const body = document.getElementById('incentive-modal-body');
     body.innerHTML = `
-      <div class="crew-modal-title"><span>Incentive Days</span><span style="cursor:pointer; color:var(--text-muted); padding:4px;" onclick="closeIncentiveModal()">✕</span></div>
+      <h2 class="crew-modal-title"><span>Incentive Days</span><button type="button" class="icon-btn" onclick="closeIncentiveModal()" aria-label="Close">✕</button></h2>
       <div class="help-text" style="margin-top:0;">Monthly overage bonus (&gt;83h flown), if any, isn't tied to a single flight and isn't listed here — it's already folded into the total below though.</div>
       ${rows.length ? rows.map(r => `<div class="crew-row" style="display:block;">
           <div style="display:flex; justify-content:space-between;"><span>${formatOrdinalDate(r.date)} — ${r.label}</span><span class="crew-pos" style="color:var(--accent-cyan);">${r.hours.toFixed(2)}h</span></div>
           ${r.reasons.length ? `<div class="help-text" style="margin:2px 0 0;">${r.reasons.join(', ')}</div>` : ''}
         </div>`).join('') : '<div class="help-text" style="margin-top:0;">No incentive hours this period.</div>'}`;
-    document.getElementById('incentive-modal-overlay').classList.add('open');
+    if(window.openOverlayModal) openOverlayModal('incentive-modal-overlay', 'incentive-modal-body', 'Incentive Days');
+    else document.getElementById('incentive-modal-overlay').classList.add('open');
   }
 
   function showIncentiveModal(){
@@ -1372,16 +1492,18 @@
       : '<div class="help-text" style="margin-top:0;">No incentive hours this period.</div>';
     const body = document.getElementById('incentive-modal-body');
     body.innerHTML = `
-      <div class="crew-modal-title"><span>Incentives — through ${maxDateStr}</span><span style="cursor:pointer; color:var(--text-muted); padding:4px;" onclick="closeIncentiveModal()">✕</span></div>
+      <h2 class="crew-modal-title"><span>Incentives — through ${maxDateStr}</span><button type="button" class="icon-btn" onclick="closeIncentiveModal()" aria-label="Close">✕</button></h2>
       <div class="help-text" style="margin-top:0;">Monthly overage bonus (&gt;83h flown), if any, isn't tied to a single flight and isn't listed here — it's already folded into the totals though.</div>
       <div class="eyebrow" style="margin:10px 0 4px;">Predicted</div>
       ${renderRows(predictedRows)}
       <div class="eyebrow" style="margin:14px 0 4px;">Actual</div>
       ${renderRows(actualRows)}`;
-    document.getElementById('incentive-modal-overlay').classList.add('open');
+    if(window.openOverlayModal) openOverlayModal('incentive-modal-overlay', 'incentive-modal-body', 'Incentives — through ' + maxDateStr);
+    else document.getElementById('incentive-modal-overlay').classList.add('open');
   }
   function closeIncentiveModal(){
-    document.getElementById('incentive-modal-overlay').classList.remove('open');
+    if(window.closeOverlayModal) closeOverlayModal('incentive-modal-overlay', 'incentive-modal-body');
+    else document.getElementById('incentive-modal-overlay').classList.remove('open');
   }
 
   // ---- Swap Requests (manual, persisted in this browser) ----
@@ -1449,8 +1571,8 @@
             ${SWAP_STATUSES.map(st => `<option value="${st}" ${st === s.status ? 'selected' : ''}>${st}</option>`).join('')}
           </select>
         </div></div>
-        <div class="mono" style="font-size:10px; color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px;">Relevant Crew</div>
-        ${s.colleagues.map((c, idx) => `<div class="crew-row"><span>${c.name}${c.note ? ' <span class="crew-pos">' + c.note + '</span>' : ''}</span><span style="cursor:pointer; color:var(--text-muted); padding:0 4px;" onclick="removeColleagueFromSwap(${s.id},${idx})">✕</span></div>`).join('') || '<div class="help-text" style="margin-top:0;">None added yet.</div>'}
+        <div class="mono" style="font-size:var(--fs-micro); color:var(--text-muted); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:6px;">Relevant Crew</div>
+        ${s.colleagues.map((c, idx) => `<div class="crew-row"><span>${c.name}${c.note ? ' <span class="crew-pos">' + c.note + '</span>' : ''}</span><button type="button" class="icon-btn" style="min-width:34px; min-height:34px; font-size:13px;" onclick="removeColleagueFromSwap(${s.id},${idx})" aria-label="Remove ${c.name}">✕</button></div>`).join('') || '<div class="help-text" style="margin-top:0;">None added yet.</div>'}
         <div style="display:flex; gap:6px; margin-top:8px;">
           <input type="text" id="swap-colleague-name-${s.id}" class="swap-mini-input" placeholder="Name">
           <input type="text" id="swap-colleague-note-${s.id}" class="swap-mini-input" placeholder="Note (optional)">
@@ -2294,7 +2416,7 @@
         const extra = d.flatCredit * (veteranMult - 1);
         if(extra > 0.01){
           const reasons = [];
-          if(veteranMult > 1) reasons.push('day ' + dayIndex[d.date] + ' veteran (14th+, Inc 6)');
+          if(veteranMult > 1) reasons.push('day ' + dayIndex[d.date] + ' veteran (14th+)');
           rows.push({date: d.date, day: d.day, label, hours: extra, reasons});
         }
         return;
@@ -2308,15 +2430,15 @@
         const shabbat = dayShabbat;
         const holiday = HOLIDAY_DATES.includes(d.date);
         let mult = 1;
-        if(holiday){ mult = 2; reasonSet.add('holiday (2×, Inc 3)'); }
-        else if(checked && shabbat){ mult = 2; reasonSet.add('unscheduled (Inc 11) + Shabbat window'); }
-        else if(checked){ mult = 1.5; reasonSet.add('unscheduled flight (Inc 11)'); }
+        if(holiday){ mult = 2; reasonSet.add('holiday (2×)'); }
+        else if(checked && shabbat){ mult = 2; reasonSet.add('unscheduled + Shabbat window'); }
+        else if(checked){ mult = 1.5; reasonSet.add('unscheduled flight'); }
         else if(shabbat){ mult = 1.5; reasonSet.add('Shabbat window touched'); }
         const combinedMult = Math.min(2, mult * veteranMult * secondActivityMult);
         dayExtra += l.block * (combinedMult - 1);
       });
-      if(veteranMult > 1) reasonSet.add('day ' + dayIndex[d.date] + ' veteran (14th+, Inc 6)');
-      if(secondActivityMult > 1) reasonSet.add('2nd flight activity same day (Inc 10)');
+      if(veteranMult > 1) reasonSet.add('day ' + dayIndex[d.date] + ' veteran (14th+)');
+      if(secondActivityMult > 1) reasonSet.add('2nd flight activity same day');
       if(dayExtra > 0.01) rows.push({date: d.date, day: d.day, label, hours: dayExtra, reasons: [...reasonSet]});
     });
     return rows.sort((a, b) => b.hours - a.hours);
@@ -2658,7 +2780,7 @@
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Block Hours</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.rawBlockHours.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.rawBlockHours.toFixed(2)}h</td></tr>
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Trip Time</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.tripTimeTotal.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.tripTimeTotal.toFixed(2)}h</td></tr>
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Completion Hours</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.completion.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.completion.toFixed(2)}h</td></tr>
-        <tr style="border-bottom:1px solid var(--divider); cursor:pointer;" onclick="showIncentiveModal()"><td style="padding:6px 4px; color:var(--accent-cyan);">Incentives <span class="mono" style="font-size:9px;">▸ tap for detail</span></td><td style="text-align:right; padding:6px 4px; color:var(--accent-cyan);" class="mono">${predicted.totalIncentives.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px; color:var(--accent-cyan);" class="mono">${actual.totalIncentives.toFixed(2)}h</td></tr>
+        <tr style="border-bottom:1px solid var(--divider); cursor:pointer;" role="button" tabindex="0" aria-label="Show incentive breakdown" onclick="showIncentiveModal()"><td style="padding:6px 4px; color:var(--accent-cyan);">Incentives <span class="mono hint">▸ tap for detail</span></td><td style="text-align:right; padding:6px 4px; color:var(--accent-cyan);" class="mono">${predicted.totalIncentives.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px; color:var(--accent-cyan);" class="mono">${actual.totalIncentives.toFixed(2)}h</td></tr>
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Flight Days</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.flightDays}</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.flightDays}</td></tr>
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Per-Diem Units</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.perDiemUnits}</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.perDiemUnits}</td></tr>
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px; font-weight:600;">Total Credit Hours</td><td style="text-align:right; padding:6px 4px; font-weight:600;" class="mono">${predicted.totalCreditHours.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px; font-weight:600;" class="mono">${actual.totalCreditHours.toFixed(2)}h</td></tr>
@@ -2678,12 +2800,9 @@
     }).length;
   }
   function countFlightDays(maxDateObj, days){
-    // Inc 6's 13-day quota: DUTY (with real legs) + INS count; layover doesn't. Kept in sync
-    // with computeActivityDayIndices, which drives the 14th-day veteran multiplier — same rule.
     days = days || rosterData;
     return days.filter(d => {
-      const qualifies = (d.code === 'DUTY' && d.legs && d.legs.length > 0) || d.code === 'INS';
-      if(!qualifies) return false;
+      if(!(d.code === 'DUTY' && d.legs && d.legs.length > 0)) return false;
       if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return false; }
       return true;
     }).length;
@@ -2842,6 +2961,132 @@
       navigator.serviceWorker.register('./sw.js').catch(err => console.warn('Service worker registration failed:', err));
     });
   }
+</script>
+<script>
+/* Phase 1 accessibility runtime: focus trap, background inert, Escape-to-close,
+   Enter/Space activation for role="button", tab-bar arrow keys, tab/panel ARIA.
+   No calculation logic. */
+(function(){
+  'use strict';
+  var _lastFocused = null, _trapHandler = null, _inertCount = 0;
+
+  function focusables(c){
+    return Array.prototype.slice.call(c.querySelectorAll(
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]'
+    )).filter(function(el){
+      return el.tabIndex !== -1 && (el.offsetWidth + el.offsetHeight) > 0;
+    });
+  }
+
+  window.trapFocus = function(container){
+    if(!container) return;
+    if(_trapHandler){ document.removeEventListener('keydown', _trapHandler, true); }
+    _lastFocused = document.activeElement;
+    var list = focusables(container);
+    (list[0] || container).focus();
+    _trapHandler = function(e){
+      if(e.key === 'Escape' || e.key === 'Esc'){ e.preventDefault(); window.closeTopOverlay(); return; }
+      if(e.key !== 'Tab') return;
+      var f = focusables(container);
+      if(!f.length){ e.preventDefault(); container.focus(); return; }
+      var first = f[0], last = f[f.length - 1], a = document.activeElement;
+      if(e.shiftKey && (a === first || a === container)){ e.preventDefault(); last.focus(); }
+      else if(!e.shiftKey && a === last){ e.preventDefault(); first.focus(); }
+    };
+    document.addEventListener('keydown', _trapHandler, true);
+  };
+
+  window.releaseFocus = function(restore){
+    if(_trapHandler){ document.removeEventListener('keydown', _trapHandler, true); _trapHandler = null; }
+    if(restore !== false && _lastFocused && _lastFocused.focus){ try{ _lastFocused.focus(); }catch(e){} }
+    _lastFocused = null;
+  };
+
+  window.setBackgroundInert = function(on){
+    _inertCount = Math.max(0, _inertCount + (on ? 1 : -1));
+    var active = _inertCount > 0;
+    [document.getElementById('main-content'), document.querySelector('nav.tabs'), document.querySelector('header.top')]
+      .forEach(function(el){
+        if(!el) return;
+        try{ el.inert = active; }catch(e){}
+        if(active) el.setAttribute('aria-hidden', 'true'); else el.removeAttribute('aria-hidden');
+      });
+  };
+
+  window.openOverlayModal = function(overlayId, bodyId, label){
+    var body = document.getElementById(bodyId);
+    if(body && label) body.setAttribute('aria-label', label);
+    document.getElementById(overlayId).classList.add('open');
+    window.setBackgroundInert(true);
+    window.trapFocus(body);
+  };
+  window.closeOverlayModal = function(overlayId){
+    document.getElementById(overlayId).classList.remove('open');
+    window.setBackgroundInert(false);
+    window.releaseFocus();
+  };
+
+  window.closeTopOverlay = function(){
+    if(document.getElementById('crew-modal-overlay').classList.contains('open')){ closeCrewModal(); return; }
+    if(document.getElementById('incentive-modal-overlay').classList.contains('open')){ closeIncentiveModal(); return; }
+    if(document.getElementById('drawer-overlay').classList.contains('open')){ closeDrawer(); return; }
+  };
+
+  /* Enter / Space activation for non-native controls marked role="button" */
+  document.addEventListener('keydown', function(e){
+    if(e.key !== 'Enter' && e.key !== ' ' && e.key !== 'Spacebar') return;
+    var t = e.target;
+    if(!t || !t.getAttribute) return;
+    if(t.getAttribute('role') === 'button' && t.tagName !== 'BUTTON' && t.tagName !== 'A'){
+      e.preventDefault();
+      t.click();
+    }
+  });
+
+  /* Arrow-key navigation across the bottom tab bar (WAI-ARIA tabs pattern) */
+  var navEl = document.querySelector('nav.tabs');
+  if(navEl){
+    navEl.addEventListener('keydown', function(e){
+      if(['ArrowRight','ArrowLeft','Home','End'].indexOf(e.key) === -1) return;
+      var btns = Array.prototype.slice.call(navEl.querySelectorAll('.tab-btn'));
+      var i = btns.indexOf(document.activeElement);
+      if(i === -1) return;
+      e.preventDefault();
+      var n = e.key === 'ArrowRight' ? (i + 1) % btns.length
+            : e.key === 'ArrowLeft' ? (i - 1 + btns.length) % btns.length
+            : e.key === 'Home' ? 0 : btns.length - 1;
+      switchTab(btns[n].getAttribute('data-tab'));
+      btns[n].focus();
+    });
+  }
+
+  /* Tab / tabpanel semantics for the bottom bar; region labels for drawer-only panels */
+  (function initTabsA11y(){
+    var nav = document.querySelector('nav.tabs');
+    if(nav){ nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', 'Primary'); }
+    document.querySelectorAll('.tab-btn').forEach(function(b){
+      var t = b.getAttribute('data-tab');
+      b.setAttribute('role', 'tab');
+      b.id = 'tab-' + t;
+      b.setAttribute('aria-controls', 'panel-' + t);
+      b.setAttribute('aria-selected', b.classList.contains('active') ? 'true' : 'false');
+    });
+    var LABELS = {roster:'Roster', salary:'Salary Predictor', calendar:'Roster Calendar', share:'Share Roster',
+      settings:'Settings', swap:'Swap Requests', availability:'Available Windows', ftl:'FTL Limits',
+      whatif:'What If', annual:'Annual Cumulative'};
+    document.querySelectorAll('.tab-panel').forEach(function(p){
+      var name = p.id.replace('panel-', '');
+      p.setAttribute('tabindex', '-1');
+      if(document.getElementById('tab-' + name)){
+        p.setAttribute('role', 'tabpanel');
+        p.setAttribute('aria-labelledby', 'tab-' + name);
+      } else {
+        p.setAttribute('role', 'region');
+        p.setAttribute('aria-label', LABELS[name] || name);
+      }
+    });
+  })();
+})();
 </script>
 </body>
 </html>

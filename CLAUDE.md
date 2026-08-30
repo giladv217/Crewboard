@@ -51,6 +51,8 @@ If there's more than trivial drift, don't patch piecemeal — copy `crewboard.ht
 sample, the personal constants, clear the route-estimates textarea, zero the rate defaults,
 genericize the share-preview strings). The user has explicitly asked to keep "ISRAIR" plus the
 orange star logo in the template too — an airline name isn't personal data, don't scrub that.
+Expected/intentional drift: the Route Block-Hour Estimates textarea content itself (personal
+flying-history data, deliberately left empty in the template).
 
 ## Architecture overview
 
@@ -87,23 +89,29 @@ Shabbat detection converts UTC→Israel local internally (`toIsraelLocal`, +3h).
   fallback for legs missing real block hours. **Every place summing leg block hours must go
   through `resolveLegBlock`, never read `l.block` directly** — the `flatCredit` day branch was
   found not doing this once. Estimated values must always render visibly marked (amber "~X.XXh
-  est."), never blended silently with confirmed numbers.
+  est."), never blended silently with confirmed numbers. **The user has explicitly said: if a new
+  destination shows up with no block hours, leave it to them to fill in — don't proactively
+  research/estimate it. Only search for a route's typical flight time when they directly ask.**
 
 ## Official incentive numbering ("Inc N")
 
 The airline has an official numbered incentive legend the user wants used in generated reports.
+Note: the in-app drill-down reason chips deliberately no longer print the "Inc N" label (a later
+mobile session decision) — they read `holiday (2×)`, `unscheduled flight`, etc. The legend below
+is still the reference for generated reports.
+
 Confirmed mapping so far:
 
 | Inc | Meaning | Payout | Implemented as |
 |---|---|---|---|
 | 1 | Activity on Shabbat | ? | generic "Shabbat window touched" — not distinguished from 9/15 |
 | 2 | Simulator training on Saturday | 1.5x block hours (mechanism for a non-block INS day unclear) | not implemented |
-| 3 | Activity on core holidays | flat 2x block credit | `holiday (2×, Inc 3)` |
+| 3 | Activity on core holidays | flat 2x block credit | `holiday (2×)` |
 | 4 | Exceeding 83 flight-hour monthly quota | +0.5×/hr on hours above 83 | "Monthly Overage Bonus" |
-| 6 | Exceeding 13-day assignment quota | 1.5x from the 14th qualifying day | veteran multiplier — DUTY + INS count, LAYOVER does not |
+| 6 | Exceeding 13-day assignment quota | 1.5x from the 14th qualifying day | veteran multiplier — DUTY + LAYOVER + INS each count as one activity day (one credit per calendar day); standby / paid-off don't. A separate, stricter "Flight days: X/13" gauge counts DUTY-with-legs only. |
 | 9 | Long-layover flights on Shabbat/holiday | ? | not distinguished from 1/15 |
-| 10 | Two DUTY periods same calendar day | 1.5x on the 2nd | `2nd flight activity same day (Inc 10)` |
-| 11 | Unpublished flight / >3h change / added legs | 1.5x (2x if also Shabbat) | `unscheduled flight (Inc 11)` |
+| 10 | Two DUTY periods same calendar day | 1.5x on the 2nd | `2nd flight activity same day` |
+| 11 | Unpublished flight / >3h change / added legs | 1.5x (2x if also Shabbat) | `unscheduled flight` |
 | 12 | Schedule change, 7+ days notice | 1.5x block hours (possibly actually an exclusion clause, unconfirmed) | not implemented |
 | 13 | Standby not activated, Shabbat/holiday | 1.5x (mechanism on top of flat 2.5h standby credit unclear) | not implemented |
 | 14 | Worked >50% of period's Shabbats | 1.5x (scope unclear: all Shabbat flights or just the overage ones) | not implemented |
@@ -113,9 +121,19 @@ Confirmed mapping so far:
 rather than implementing a guess. "1.5x of block hours" doesn't have an obvious meaning for a
 standby or ground-instruction day, which carry no block hours in this data model.
 
-Inc 6 correction history: the veteran-multiplier day-count and the "Flight days: X/13" gauge used
-to disagree (one counted layover, the other excluded instruction) — both were wrong in opposite
-directions. Confirmed real rule: DUTY + INS count, LAYOVER never does. Both functions now agree.
+Inc 6 rule (confirmed): the "activity day" count that drives the 14th-day veteran multiplier and
+the purple day-count badges (`computeActivityDayIndices`) counts DUTY, LAYOVER, and INS days —
+one activity-day credit per calendar day. A layover day is a full activity day. Standby and
+paid-off days never count.
+
+This is deliberately NOT the same as the "Flight days this period: X/13" gauge (`countFlightDays`),
+which is a stricter, flying-only count: DUTY days with real legs only (no LAYOVER, no INS). The two
+used to be forced to agree; they are now intentionally separate rules — do not re-merge them.
+
+History: earlier versions had the two counts disagreeing by accident (one included layover, the
+other excluded instruction). They were briefly reconciled to "DUTY + INS, no LAYOVER" for both,
+then corrected to the current split when the user confirmed a layover day does earn an
+activity-day credit.
 
 ## Fanfare / AIMS reconciliation
 
@@ -210,3 +228,6 @@ twice already.
   visible rings), not replacing the color/type identity.
 - Verify fixes against the user's real uploaded file data where possible — several bugs here only
   manifested on real files, never on hand-built test cases.
+- No automatic sync exists anywhere in this workflow — not to GitHub, not to a Claude Projects
+  knowledge base. Every environment (local file, GitHub Pages, Claude Code) is updated manually by
+  the user. Don't imply otherwise.
