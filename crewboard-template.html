@@ -120,14 +120,27 @@
 
   header.top{padding:calc(22px + env(safe-area-inset-top)) calc(20px + env(safe-area-inset-right)) 16px calc(20px + env(safe-area-inset-left)); border-bottom:1px solid var(--divider); display:flex; align-items:flex-start; gap:12px; position:relative;}
   header.top::after{content:''; position:absolute; left:0; right:0; bottom:-1px; height:2px; background:linear-gradient(90deg, transparent, var(--accent-cyan) 35%, var(--accent-amber) 65%, transparent); opacity:.55; filter:blur(.3px);}
-  .drawer-btn{display:inline-flex; align-items:center; justify-content:center; min-width:var(--tap-min); min-height:var(--tap-min); margin:-6px -6px -6px -8px; background:transparent; border:none; color:var(--text-primary); font-size:22px; cursor:pointer; line-height:1; flex-shrink:0; -webkit-tap-highlight-color:transparent;}
-  .drawer-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1100;}
-  .drawer-overlay.open{display:block;}
-  .drawer-panel{position:fixed; top:0; left:0; bottom:0; width:78%; max-width:300px; background:var(--panel); transform:translateX(-100%); transition:transform .3s var(--ease-native); z-index:1101; padding:20px; box-sizing:border-box; overflow-y:auto; box-shadow:12px 0 32px rgba(0,0,0,.4);}
-  .drawer-overlay.open .drawer-panel{transform:translateX(0);}
-  .drawer-title{font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary);}
-  .drawer-item{display:flex; align-items:center; gap:10px; width:100%; padding:14px 8px; min-height:var(--tap-min); border-radius:var(--r-sm); cursor:pointer; color:var(--text-primary); background:transparent; border:none; text-align:left; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; -webkit-appearance:none; appearance:none; -webkit-tap-highlight-color:transparent;}
-  .drawer-item:active{background:var(--panel-raised, #1b2434);}
+  /* --- Phase 3A: More tab + Roster header controls --- */
+  .back-btn{display:inline-flex; align-items:center; gap:2px; min-height:var(--tap-min); padding:6px 10px 6px 2px; margin-left:-4px; background:transparent; border:none; color:var(--accent-cyan); font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:var(--fs-small); cursor:pointer; flex-shrink:0; -webkit-tap-highlight-color:transparent;}
+  .back-btn svg{width:18px; height:18px; stroke:currentColor; fill:none; stroke-width:2.4;}
+  .back-btn[hidden]{display:none;}
+  .manage-btn{display:inline-flex; align-items:center; justify-content:center; min-width:var(--tap-min); min-height:var(--tap-min); margin-right:-4px; background:transparent; border:1px solid var(--divider); border-radius:var(--r-sm); color:var(--text-primary); cursor:pointer; flex-shrink:0; -webkit-tap-highlight-color:transparent;}
+  .manage-btn svg{width:20px; height:20px; stroke:currentColor; fill:none; stroke-width:1.9;}
+  .manage-btn[hidden]{display:none;}
+  .manage-btn:active{background:var(--panel-raised);}
+  .period-summary{display:block; width:100%; margin-bottom:16px; padding:11px 14px; min-height:var(--tap-min); background:var(--panel); border:1px solid var(--divider); border-radius:var(--r-md); color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:var(--fs-caption); line-height:1.5; text-align:left; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+  .period-summary:active{opacity:.8;}
+  .period-summary[hidden]{display:none;}
+  .roster-empty{text-align:center; padding:20px 8px 8px;}
+  .roster-empty[hidden]{display:none;}
+  .more-list{display:flex; flex-direction:column; gap:10px;}
+  .more-item{display:flex; align-items:center; gap:14px; width:100%; padding:13px 14px; min-height:var(--tap-min); background:var(--panel); border:1px solid var(--divider); border-radius:var(--r-md); text-align:left; cursor:pointer; -webkit-appearance:none; appearance:none; -webkit-tap-highlight-color:transparent;}
+  .more-item:active{background:var(--panel-raised);}
+  .more-item-ic{font-size:20px; line-height:1; flex-shrink:0; width:24px; text-align:center;}
+  .more-item-tx{display:flex; flex-direction:column; gap:2px; flex:1; min-width:0;}
+  .more-item-tx b{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:15px; color:var(--text-primary);}
+  .more-item-tx span{font-size:var(--fs-caption); color:var(--text-muted); line-height:1.35;}
+  .more-item-cv{color:var(--text-muted); font-size:18px; flex-shrink:0;}
   .swap-mini-input{flex:1; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:11px 10px; min-height:var(--tap-min); color:var(--text-primary); font-size:var(--fs-small); box-sizing:border-box;}
   .avail-window{background:var(--panel); border:1px solid var(--divider); border-radius:12px; box-shadow:var(--shadow-sm); padding:12px 16px; margin-bottom:8px;}
   .avail-window.past{opacity:0.5;}
@@ -272,7 +285,7 @@
   @media print{
     body{background:#fff;}
     .app{background:#fff; max-width:none;}
-    .tabs, .load-btn, #edit-mode-btn, #add-flight-form, .day-edit-controls, .trip-note-input, #family-image-container, .share-btn, .drawer-overlay, .crew-modal-overlay, .drawer-btn{display:none !important;}
+    .tabs, .load-btn, #edit-mode-btn, #add-flight-form, .day-edit-controls, .trip-note-input, #family-image-container, .share-btn, .crew-modal-overlay, .manage-btn, .back-btn, .period-summary{display:none !important;}
     .tab-panel{display:none !important;}
     #panel-salary{display:block !important;}
     .breakdown, .gauge-card, .thresh-bar{-webkit-print-color-adjust:exact; print-color-adjust:exact;}
@@ -344,14 +357,15 @@
 <div class="app">
 
   <header class="top">
-    <button class="drawer-btn" type="button" onclick="openDrawer()" aria-label="Open menu" aria-haspopup="dialog" aria-expanded="false">☰</button>
-    <div style="flex:1;">
+    <button class="back-btn" type="button" id="back-btn" onclick="switchTab('more')" hidden><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 18l-6-6 6-6"/></svg>More</button>
+    <div style="flex:1; min-width:0;">
       <div class="eyebrow" style="display:flex; align-items:center; gap:6px;">
         <svg width="14" height="14" viewBox="0 0 24 24" style="flex-shrink:0;" aria-hidden="true"><polygon points="12,1 15,9 24,9 17,14.5 19.5,23 12,17.8 4.5,23 7,14.5 0,9 9,9" fill="#F2A93B"/></svg>
         ISRAIR · FO A320 · YOUR BASE
       </div>
       <h1 class="title" id="header-title">Roster</h1>
     </div>
+    <button class="manage-btn" type="button" id="manage-btn" onclick="openManageSheet()" aria-haspopup="dialog" aria-expanded="false" aria-label="Manage roster" title="Manage roster"><svg viewBox="0 0 24 24" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="8" r="2.6" fill="var(--panel)"/><circle cx="15" cy="16" r="2.6" fill="var(--panel)"/></svg></button>
   </header>
 
   <main id="main-content">
@@ -362,14 +376,11 @@
         <div class="next-duty-main" id="next-duty-main">Loading…</div>
         <div class="next-duty-sub" id="next-duty-sub"></div>
       </div>
-      <button type="button" class="load-btn" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
-      <input type="file" id="pdf-input" accept="application/pdf,.pdf,.csv,text/csv,.xlsx,.xls" class="sr-only" tabindex="-1" aria-hidden="true">
-      <div id="parse-status" class="help-text" style="display:none; margin-top:10px;"></div>
-      <div id="review-panel" style="display:none; margin-top:14px;"></div>
-      <button type="button" class="load-btn v-cyan" id="edit-mode-btn" style="margin-top:8px;" onclick="toggleEditMode()">Enter Edit Mode</button>
-      <button type="button" class="load-btn v-amber" id="check-all-btn" style="margin-top:8px;" onclick="checkAllMissingFlights()">Check All Missing Flights</button>
-      <button type="button" class="load-btn v-purple" id="fill-layovers-btn" style="margin-top:8px;" onclick="fillImplicitLayovers()">Fill Implied Layovers</button>
-      <div id="layover-review-panel"></div>
+      <button type="button" class="period-summary" id="period-summary" onclick="switchTab('salary')" hidden aria-label="Period summary, opens Salary Predictor"></button>
+      <div id="roster-empty" class="roster-empty" hidden>
+        <p class="help-text" style="margin-top:0; margin-bottom:12px;">No roster is loaded on this device yet.</p>
+        <button type="button" class="load-btn" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
+      </div>
       <div id="add-flight-form" style="display:none; margin-top:12px; border:1px solid var(--accent-cyan); border-radius:12px; padding:12px; background:var(--panel);">
         <h3 class="eyebrow" style="margin-bottom:8px;">Add Flight</h3>
 
@@ -395,7 +406,6 @@
         <div class="help-text" style="margin-top:0; margin-bottom:10px;">Leg clock times (for Shabbat detection) are estimated from Report + cumulative block hours — an approximation, not your exact schedule.</div>
         <button type="button" class="load-btn" onclick="submitAddFlight()">Add to Roster</button>
       </div>
-      <div class="help-text" style="margin-top:14px; margin-bottom:16px;">Check a flight's box if it was unscheduled — its block hours count at 1.5×. Shabbat (Fri 19:00 – Sat 19:00 Israel time) is auto-detected (SHB badge) — capped at 2× if a leg is both unscheduled and Shabbat. Holiday-eve/holiday dates (HOL badge) pay flat 2×. A day's 2nd separate flight activity (2nd ACT badge) pays 1.5× — doesn't apply to one continuous multi-destination trip. From your 14th activity day onward (DUTY + LAYOVER count, standby doesn't), duty days get an extra 1.5× (red badge). Any block hours flown this period above 83h earn a further 1.5×. Cancelled flights (CXL) earn a flat 3h credit.</div>
       <div id="roster-list"></div>
     </section>
 
@@ -524,6 +534,17 @@
       </div>
       <button class="share-btn" onclick="shareRoster()">Share This Roster</button>
       <div class="help-text">Sends a simple, readable version of your trip dates — no login or duty codes required on their end.</div>
+    </section>
+
+    <section class="tab-panel" id="panel-more">
+      <div class="more-list">
+        <button type="button" class="more-item" onclick="switchTab('whatif')"><span class="more-item-ic" aria-hidden="true">🔮</span><span class="more-item-tx"><b>What If</b><span>Preview a new flight's effect on your pay</span></span><span class="more-item-cv" aria-hidden="true">›</span></button>
+        <button type="button" class="more-item" onclick="switchTab('swap')"><span class="more-item-ic" aria-hidden="true">🔄</span><span class="more-item-tx"><b>Swap Requests</b><span>Track a trip you want to swap</span></span><span class="more-item-cv" aria-hidden="true">›</span></button>
+        <button type="button" class="more-item" onclick="switchTab('availability')"><span class="more-item-ic" aria-hidden="true">🟢</span><span class="more-item-tx"><b>Available Windows</b><span>Every free day on the loaded roster</span></span><span class="more-item-cv" aria-hidden="true">›</span></button>
+        <button type="button" class="more-item" onclick="switchTab('ftl')"><span class="more-item-ic" aria-hidden="true">📊</span><span class="more-item-tx"><b>FTL Limits</b><span>Rolling duty and flight-hour totals</span></span><span class="more-item-cv" aria-hidden="true">›</span></button>
+        <button type="button" class="more-item" onclick="switchTab('annual')"><span class="more-item-ic" aria-hidden="true">📅</span><span class="more-item-tx"><b>Annual Cumulative</b><span>Your year-to-date assignment-day count</span></span><span class="more-item-cv" aria-hidden="true">›</span></button>
+        <button type="button" class="more-item" onclick="switchTab('settings')"><span class="more-item-ic" aria-hidden="true">⚙️</span><span class="more-item-tx"><b>Settings</b><span>Pay rates, route estimates, theme, API key</span></span><span class="more-item-cv" aria-hidden="true">›</span></button>
+      </div>
     </section>
 
     <section class="tab-panel" id="panel-settings">
@@ -670,15 +691,24 @@
     <div class="crew-modal" id="incentive-modal-body" role="dialog" aria-modal="true" tabindex="-1"></div>
   </div>
 
-  <div class="drawer-overlay" id="drawer-overlay" onclick="if(event.target===this) closeDrawer()">
-    <div class="drawer-panel" role="dialog" aria-modal="true" aria-label="Menu" tabindex="-1">
-      <h2 class="drawer-title"><span>Menu</span><button type="button" class="icon-btn" onclick="closeDrawer()" aria-label="Close menu">✕</button></h2>
-      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('settings');">⚙️ Settings</button>
-      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('swap');">🔄 Swap Requests</button>
-      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('availability');">🟢 Available Windows</button>
-      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('ftl');">📊 FTL Limits</button>
-      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('whatif');">🔮 What If</button>
-      <button type="button" class="drawer-item" onclick="closeDrawer(false); switchTab('annual');">📅 Annual Cumulative</button>
+  <input type="file" id="pdf-input" accept="application/pdf,.pdf,.csv,text/csv,.xlsx,.xls" class="sr-only" tabindex="-1" aria-hidden="true">
+
+  <div class="crew-modal-overlay" id="manage-overlay" onclick="if(event.target===this) closeManageSheet()">
+    <div class="crew-modal" id="manage-sheet" role="dialog" aria-modal="true" aria-labelledby="manage-title" tabindex="-1">
+      <h2 class="crew-modal-title" id="manage-title">Manage Roster<button type="button" class="icon-btn" onclick="closeManageSheet()" aria-label="Close">✕</button></h2>
+      <button type="button" class="load-btn" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
+      <div id="parse-status" class="help-text" style="display:none; margin-top:10px;"></div>
+      <div id="review-panel" style="display:none; margin-top:14px;"></div>
+      <button type="button" class="load-btn v-cyan" id="edit-mode-btn" style="margin-top:8px;" onclick="toggleEditMode()">Enter Edit Mode</button>
+      <button type="button" class="load-btn v-amber" id="check-all-btn" style="margin-top:8px;" onclick="checkAllMissingFlights()">Check All Missing Flights</button>
+      <button type="button" class="load-btn v-purple" id="fill-layovers-btn" style="margin-top:8px;" onclick="fillImplicitLayovers()">Fill Implied Layovers</button>
+      <div id="layover-review-panel"></div>
+      <div class="collapse-section collapsed" data-collapse-id="howpay" style="margin-top:14px;">
+        <button type="button" class="collapse-header" aria-expanded="false" onclick="toggleCollapse(this)"><span>How pay is calculated</span><span class="collapse-chevron" aria-hidden="true">▾</span></button>
+        <div class="collapse-body">
+          <div class="help-text" style="margin-top:8px; text-align:left;">Check a flight's box if it was unscheduled — its block hours count at 1.5×. Shabbat (Fri 19:00 – Sat 19:00 Israel time) is auto-detected (SHB badge) — capped at 2× if a leg is both unscheduled and Shabbat. Holiday-eve/holiday dates (HOL badge) pay flat 2×. A day's 2nd separate flight activity (2nd ACT badge) pays 1.5× — doesn't apply to one continuous multi-destination trip. From your 14th activity day onward (DUTY + LAYOVER count, standby doesn't), duty days get an extra 1.5× (red badge). Any block hours flown this period above 83h earn a further 1.5×. Cancelled flights (CXL) earn a flat 3h credit.</div>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -697,6 +727,9 @@
     <button class="tab-btn" type="button" data-tab="share" onclick="switchTab('share')">
       <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="6" cy="12" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="18" cy="18" r="2.5"/><path d="M8.3 10.8l7.4-3.6M8.3 13.2l7.4 3.6"/></svg>Share
     </button>
+    <button class="tab-btn" type="button" data-tab="more" onclick="switchTab('more')">
+      <svg viewBox="0 0 24 24" aria-hidden="true" focusable="false"><circle cx="5" cy="12" r="1.7"/><circle cx="12" cy="12" r="1.7"/><circle cx="19" cy="12" r="1.7"/></svg>More
+    </button>
   </nav>
 </div>
 
@@ -706,32 +739,65 @@
   if(typeof pdfjsLib !== 'undefined'){
     pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
   }
-  const titles = {roster:'Roster', salary:'Salary Predictor', calendar:'Roster Calendar', share:'Share Roster', settings:'Settings', swap:'Swap Requests', availability:'Available Windows', ftl:'FTL Limits', whatif:'What If', annual:'Annual Cumulative'};
-  const TAB_ORDER = ['roster', 'salary', 'calendar', 'share'];
-  function switchTab(name){
+  const titles = {roster:'Roster', salary:'Salary Predictor', calendar:'Roster Calendar', share:'Share Roster', more:'More', settings:'Settings', swap:'Swap Requests', availability:'Available Windows', ftl:'FTL Limits', whatif:'What If', annual:'Annual Cumulative'};
+  const TAB_ORDER = ['roster', 'salary', 'calendar', 'share', 'more'];
+  const MORE_TABS = ['settings', 'swap', 'availability', 'ftl', 'whatif', 'annual'];
+  let currentTab = 'roster';
+  function switchTab(name, fromPop){
+    const _panel = document.getElementById('panel-'+name);
+    if(!_panel) return;
     document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
     document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
-    document.getElementById('panel-'+name).classList.add('active');
-    const btn = document.querySelector('.tab-btn[data-tab="'+name+'"]');
+    _panel.classList.add('active');
+    currentTab = name;
+    const navName = MORE_TABS.indexOf(name) !== -1 ? 'more' : name;
+    const btn = document.querySelector('.tab-btn[data-tab="'+navName+'"]');
     if(btn) btn.classList.add('active');
-    document.getElementById('header-title').textContent = titles[name];
-    document.querySelectorAll('.tab-btn').forEach(b=>b.setAttribute('aria-selected', b.getAttribute('data-tab')===name ? 'true' : 'false'));
-    const _panel = document.getElementById('panel-'+name);
-    if(_panel && _panel.focus){ try{ _panel.focus({preventScroll:true}); }catch(e){ _panel.focus(); } }
+    document.querySelectorAll('.tab-btn').forEach(b=>b.setAttribute('aria-selected', b.getAttribute('data-tab')===navName ? 'true' : 'false'));
+    document.getElementById('header-title').textContent = titles[name] || name;
+    const back = document.getElementById('back-btn');
+    if(back) back.hidden = (MORE_TABS.indexOf(name) === -1);
+    const mng = document.getElementById('manage-btn');
+    if(mng) mng.hidden = (name !== 'roster');
+    const mc = document.getElementById('main-content');
+    if(mc) mc.scrollTop = 0;
+    const _focusPanel = function(){ if(_panel.focus){ try{ _panel.focus({preventScroll:true}); }catch(e){ _panel.focus(); } } };
+    _focusPanel();
+    if(fromPop) setTimeout(_focusPanel, 0); // re-assert after the browser's post-popstate focus handling
+    if(!fromPop) syncHistoryForTab(name);
   }
 
-  function openDrawer(){
-    const ov = document.getElementById('drawer-overlay');
-    ov.classList.add('open');
-    const b = document.querySelector('.drawer-btn'); if(b) b.setAttribute('aria-expanded','true');
-    if(window.setBackgroundInert) setBackgroundInert(true);
-    if(window.trapFocus) trapFocus(ov.querySelector('.drawer-panel'));
+  // ---- OS / browser Back returns from a More sub-screen to the More list ----
+  // A single extra history entry exists only while a More sub-screen is open:
+  // entering one pushes it, leaving it by any means removes it, Back pops it.
+  // No visible URL change, never reloads; degrades to the visible "< More"
+  // button where the History API is unavailable (e.g. some file:// contexts).
+  let _suppressPop = false;
+  function inSubEntry(){ try{ return !!(history.state && history.state.cbSub); }catch(e){ return false; } }
+  function syncHistoryForTab(name){
+    const isSub = MORE_TABS.indexOf(name) !== -1;
+    try{
+      if(isSub && !inSubEntry()) history.pushState({cbSub:name}, '');
+      else if(isSub && inSubEntry()) history.replaceState({cbSub:name}, '');
+      else if(!isSub && inSubEntry()){ _suppressPop = true; history.back(); }
+    }catch(e){ _suppressPop = false; }
   }
-  function closeDrawer(restore){
-    document.getElementById('drawer-overlay').classList.remove('open');
-    const b = document.querySelector('.drawer-btn'); if(b) b.setAttribute('aria-expanded','false');
-    if(window.setBackgroundInert) setBackgroundInert(false);
-    if(window.releaseFocus) releaseFocus(restore);
+  window.addEventListener('popstate', function(){
+    if(_suppressPop){ _suppressPop = false; return; }
+    if(MORE_TABS.indexOf(currentTab) !== -1) switchTab('more', true);
+  });
+  try{ history.scrollRestoration = 'manual'; }catch(e){}
+  try{ history.replaceState({}, ''); }catch(e){}
+
+  function openManageSheet(){
+    const b = document.getElementById('manage-btn'); if(b) b.setAttribute('aria-expanded','true');
+    if(window.openOverlayModal) openOverlayModal('manage-overlay', 'manage-sheet', 'Manage roster');
+    else document.getElementById('manage-overlay').classList.add('open');
+  }
+  function closeManageSheet(){
+    if(window.closeOverlayModal) closeOverlayModal('manage-overlay');
+    else document.getElementById('manage-overlay').classList.remove('open');
+    const b = document.getElementById('manage-btn'); if(b) b.setAttribute('aria-expanded','false');
   }
 
   // ---- Swipe between tabs ----
@@ -749,10 +815,8 @@
       const dx = e.changedTouches[0].clientX - startX;
       const dy = e.changedTouches[0].clientY - startY;
       if(Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return; // not a clean horizontal swipe
-      const activeBtn = document.querySelector('.tab-btn.active');
-      const currentName = activeBtn ? activeBtn.getAttribute('data-tab') : 'roster';
-      const idx = TAB_ORDER.indexOf(currentName);
-      if(idx === -1) return;
+      const idx = TAB_ORDER.indexOf(currentTab);
+      if(idx === -1) return; // on a More sub-screen — use the back control, not swipe
       const nextIdx = dx < 0 ? idx + 1 : idx - 1; // swipe left -> next tab, swipe right -> previous
       if(nextIdx < 0 || nextIdx >= TAB_ORDER.length) return;
       switchTab(TAB_ORDER[nextIdx]);
@@ -1180,6 +1244,9 @@
       html += `</div>`;
     });
     el.innerHTML = html;
+    var _empty = document.getElementById('roster-empty');
+    if(_empty) _empty.hidden = rosterData.length > 0;
+    if(typeof updatePeriodSummary === 'function') updatePeriodSummary();
   }
   renderRoster();
 
@@ -1217,6 +1284,22 @@
   }
   renderNextDuty();
   setInterval(renderNextDuty, 60000);
+
+  // ---- Compact period summary on the Roster screen (display only — reads the
+  // block-hours figure straight off the Salary tab so the two always agree) ----
+  function updatePeriodSummary(){
+    var ps = document.getElementById('period-summary');
+    if(!ps) return;
+    var n = rosterData.length;
+    if(!n){ ps.hidden = true; ps.textContent = ''; return; }
+    var fd = countFlightDays();
+    var lbl = document.getElementById('thresh-block-label');
+    var blockH = lbl ? (lbl.textContent.split('/')[0] || '').trim() : '';
+    ps.textContent = rosterData[0].date + '–' + rosterData[n - 1].date
+      + ' · ' + fd + ' flight day' + (fd === 1 ? '' : 's')
+      + (blockH ? ' · ' + blockH + ' block' : '');
+    ps.hidden = false;
+  }
 
   // ---- Available Windows: a flat list of individual free days (not merged ranges) — a crew
   // member picking a day for a private event needs "is THIS day free", not a multi-day span.
@@ -1462,7 +1545,7 @@
   }
   (function initCollapseState(){
     const state = getCollapseState();
-    const DEFAULT_COLLAPSED = {nfa:false, ground:true, rates:true, reconcile:true, annual:true};
+    const DEFAULT_COLLAPSED = {nfa:false, ground:true, rates:true, reconcile:true, annual:true, howpay:true};
     document.querySelectorAll('.collapse-section').forEach(sec => {
       const id = sec.getAttribute('data-collapse-id');
       const collapsed = state[id] !== undefined ? state[id] : DEFAULT_COLLAPSED[id];
@@ -1733,6 +1816,7 @@
     document.getElementById('add-flight-form').style.display = editMode ? 'block' : 'none';
     document.getElementById('panel-roster').classList.toggle('edit-mode-active', editMode);
     renderRoster();
+    if(document.getElementById('manage-overlay').classList.contains('open')) closeManageSheet();
   }
 
   function cancelFlight(i){
@@ -2361,6 +2445,7 @@
     renderAvailableWindows();
     renderFTL();
     recalcSalary();
+    if(document.getElementById('manage-overlay').classList.contains('open')) closeManageSheet();
     showToast('Roster loaded — ' + rosterData.length + ' days');
   }
 
@@ -2981,6 +3066,7 @@
       status.style.color = 'var(--danger)';
       status.textContent = missingCount + ' leg(s) have no block hours (likely a local-station-time PDF) — those count as 0 credit. Send that PDF to me in chat for an accurate parse.';
     }
+    if(typeof updatePeriodSummary === 'function') updatePeriodSummary();
   }
   ['rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','layover-hours','ga-training','ga-project','ga-specialcall','ga-cancelled','recon-actual'].forEach(id=>{
     document.getElementById(id).addEventListener('input', recalcSalary);
@@ -3087,7 +3173,7 @@
   window.closeTopOverlay = function(){
     if(document.getElementById('crew-modal-overlay').classList.contains('open')){ closeCrewModal(); return; }
     if(document.getElementById('incentive-modal-overlay').classList.contains('open')){ closeIncentiveModal(); return; }
-    if(document.getElementById('drawer-overlay').classList.contains('open')){ closeDrawer(); return; }
+    if(document.getElementById('manage-overlay').classList.contains('open')){ closeManageSheet(); return; }
   };
 
   /* Enter / Space activation for non-native controls marked role="button" */
@@ -3118,7 +3204,7 @@
     });
   }
 
-  /* Tab / tabpanel semantics for the bottom bar; region labels for drawer-only panels */
+  /* Tab / tabpanel semantics for the bottom bar; region labels for More sub-screen panels */
   (function initTabsA11y(){
     var nav = document.querySelector('nav.tabs');
     if(nav){ nav.setAttribute('role', 'tablist'); nav.setAttribute('aria-label', 'Primary'); }
@@ -3129,7 +3215,7 @@
       b.setAttribute('aria-controls', 'panel-' + t);
       b.setAttribute('aria-selected', b.classList.contains('active') ? 'true' : 'false');
     });
-    var LABELS = {roster:'Roster', salary:'Salary Predictor', calendar:'Roster Calendar', share:'Share Roster',
+    var LABELS = {roster:'Roster', salary:'Salary Predictor', calendar:'Roster Calendar', share:'Share Roster', more:'More',
       settings:'Settings', swap:'Swap Requests', availability:'Available Windows', ftl:'FTL Limits',
       whatif:'What If', annual:'Annual Cumulative'};
     document.querySelectorAll('.tab-panel').forEach(function(p){
