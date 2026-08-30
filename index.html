@@ -128,7 +128,7 @@
   .drawer-title{font-family:'Space Grotesk', sans-serif; font-weight:700; font-size:18px; margin-bottom:18px; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary);}
   .drawer-item{display:flex; align-items:center; gap:10px; width:100%; padding:14px 8px; min-height:var(--tap-min); border-radius:var(--r-sm); cursor:pointer; color:var(--text-primary); background:transparent; border:none; text-align:left; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; -webkit-appearance:none; appearance:none; -webkit-tap-highlight-color:transparent;}
   .drawer-item:active{background:var(--panel-raised, #1b2434);}
-  .swap-mini-input{flex:1; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:8px; color:var(--text-primary); font-size:12px; box-sizing:border-box;}
+  .swap-mini-input{flex:1; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:11px 10px; min-height:var(--tap-min); color:var(--text-primary); font-size:var(--fs-small); box-sizing:border-box;}
   .avail-window{background:var(--panel); border:1px solid var(--divider); border-radius:12px; box-shadow:var(--shadow-sm); padding:12px 16px; margin-bottom:8px;}
   .avail-window.past{opacity:0.5;}
   .avail-window-dates{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14px; color:var(--text-primary);}
@@ -155,14 +155,16 @@
   .stub.off{background:transparent; border:1px dashed var(--divider); padding:12px 16px; color:var(--text-muted); font-size:13px; display:flex; justify-content:space-between; align-items:center;}
   .stub.cxl{background:transparent; border:1px dashed var(--danger); padding:12px 16px; color:var(--text-muted); font-size:13px; display:flex; justify-content:space-between; align-items:center; opacity:0.75;}
   .stub.standby{border:1px solid var(--accent-cyan);}
-  .day-edit-controls{display:flex; gap:6px; margin:-10px 0 8px;}
-  .day-edit-btn{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); padding:4px 8px; border-radius:6px; cursor:pointer; border:1px solid var(--divider); background:transparent; color:var(--text-muted);}
+  .day-edit-controls{display:flex; flex-wrap:wrap; gap:8px; margin:-6px 0 10px;}
+  .day-edit-btn{display:inline-flex; align-items:center; justify-content:center; font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); padding:8px 12px; min-height:var(--tap-min); border-radius:var(--r-xs); cursor:pointer; border:1px solid var(--divider); background:transparent; color:var(--text-muted); -webkit-tap-highlight-color:transparent;}
   .day-edit-btn.cancel{border-color:var(--danger); color:var(--danger);}
   .day-edit-btn.remove{border-color:var(--text-muted); color:var(--text-muted);}
   .stub-head{display:flex; justify-content:space-between; align-items:center; font-family:'IBM Plex Mono', monospace; font-size:11.5px; color:var(--text-muted); margin-bottom:8px;}
   .stub-head b{color:var(--text-primary); font-size:12.5px;}
-  .crew-btn{display:inline-flex; align-items:center; justify-content:center; width:22px; height:22px; border-radius:50%; background:var(--panel-raised, #1b2434); border:1px solid var(--accent-cyan); color:var(--accent-cyan); font-size:11px; cursor:pointer; margin-left:6px; vertical-align:middle; -webkit-tap-highlight-color:transparent;}
+  .crew-btn{position:relative; display:inline-flex; align-items:center; justify-content:center; width:24px; height:24px; border-radius:50%; background:var(--panel-raised, #1b2434); border:1px solid var(--accent-cyan); color:var(--accent-cyan); font-size:12px; cursor:pointer; margin-left:6px; vertical-align:middle; flex-shrink:0; -webkit-tap-highlight-color:transparent;}
   .crew-btn.has-crew{background:var(--accent-cyan); color:var(--bg-deep);}
+  /* transparent 44x44 tap area, centred on the 24px visual — keeps the compact look */
+  .crew-btn::after{content:''; position:absolute; top:50%; left:50%; width:var(--tap-min); height:var(--tap-min); transform:translate(-50%,-50%);}
   .crew-modal-overlay{display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:1000; align-items:flex-end; justify-content:center;}
   .crew-modal-overlay.open{display:flex;}
   .crew-modal-overlay.open .crew-modal{animation:modalSlideUp .32s var(--ease-native);}
@@ -174,8 +176,8 @@
   .crew-pos{color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:11px;}
   .leg-row{display:flex; justify-content:space-between; align-items:center; padding:8px 0; border-bottom:1px solid var(--divider); gap:8px;}
   .leg-row:last-child{border-bottom:none;}
-  .unsched-wrap{display:flex; align-items:center; cursor:pointer; flex-shrink:0;}
-  .unsched-wrap input{position:absolute; opacity:0; width:0; height:0;}
+  .unsched-wrap{display:flex; align-items:center; gap:10px; min-height:var(--tap-min); cursor:pointer; flex-shrink:0; -webkit-tap-highlight-color:transparent;}
+  .unsched-wrap input[type="checkbox"]{width:22px; height:22px; flex-shrink:0; margin:0; accent-color:var(--danger); cursor:pointer;}
   .unsched-wrap .cbox{width:16px; height:16px; border:1.5px solid var(--text-muted); border-radius:4px; display:block; position:relative; transition:all .15s ease;}
   .unsched-wrap input:checked + .cbox{background:var(--danger); border-color:var(--danger);}
   .unsched-wrap input:checked + .cbox::after{content:''; position:absolute; left:4px; top:1px; width:4px; height:8px; border:solid var(--bg-deep); border-width:0 2px 2px 0; transform:rotate(45deg);}
@@ -217,7 +219,7 @@
   .next-duty-label{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); letter-spacing:0.1em; color:var(--accent-cyan); text-transform:uppercase; margin-bottom:6px;}
   .next-duty-main{font-family:'Space Grotesk', sans-serif; font-size:19px; font-weight:600; color:var(--text-primary);}
   .next-duty-sub{font-size:12.5px; color:var(--text-muted); margin-top:4px;}
-  .trip-note-input{width:100%; box-sizing:border-box; margin-top:6px; background:transparent; border:1px dashed var(--divider); border-radius:8px; padding:8px 10px; font-family:'IBM Plex Sans', sans-serif; font-size:12px; color:var(--text-primary);}
+  .trip-note-input{width:100%; box-sizing:border-box; margin-top:8px; background:transparent; border:1px dashed var(--divider); border-radius:8px; padding:11px 12px; min-height:var(--tap-min); font-family:'IBM Plex Sans', sans-serif; font-size:var(--fs-small); color:var(--text-primary);}
   .trip-note-input::placeholder{color:var(--text-muted);}
   .collapse-section{margin-bottom:10px; border:1px solid var(--divider); border-radius:12px; overflow:hidden;}
   .collapse-header{display:flex; justify-content:space-between; align-items:center; width:100%; padding:12px 14px; min-height:var(--tap-min); cursor:pointer; font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:var(--fs-small); text-align:left; color:var(--text-primary); background:var(--panel); border:none; -webkit-appearance:none; appearance:none; -webkit-tap-highlight-color:transparent;}
@@ -226,12 +228,14 @@
   .collapse-body{max-height:3000px; overflow:hidden; transition:max-height 0.3s ease, padding 0.3s ease; padding:0 14px 14px;}
   .collapse-section.collapsed .collapse-body{max-height:0; padding:0 14px;}
   .breakdown{margin:16px 0;}
-  .brk-row{display:flex; justify-content:space-between; padding:10px 0; border-bottom:1px solid var(--divider); font-size:13.5px;}
+  .brk-row{display:flex; justify-content:space-between; align-items:center; padding:10px 0; border-bottom:1px solid var(--divider); font-size:13.5px;}
+  .brk-row[role="button"]{min-height:var(--tap-min); gap:8px;}
   .brk-row:last-child{border-bottom:none; font-weight:600;}
   .brk-row span.val{font-family:'IBM Plex Mono', monospace; color:var(--text-primary);}
   .field-group{margin-bottom:14px;}
   .field-group label{display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px; font-family:'IBM Plex Mono', monospace; letter-spacing:0.04em;}
-  .field-group .input-wrap{display:flex; align-items:center; background:var(--panel-raised); border:1px solid var(--divider); border-radius:9px; padding:0 12px;}
+  .field-group .input-wrap{display:flex; align-items:center; min-height:var(--tap-min); background:var(--panel-raised); border:1px solid var(--divider); border-radius:9px; padding:0 12px;}
+  .field-group .input-wrap input, .field-group .input-wrap select{min-height:var(--tap-min); box-sizing:border-box;}
   .field-group .input-wrap span{color:var(--text-muted); font-size:13px; margin-right:4px;}
   .field-group input{background:transparent; border:none; outline:none; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:15px; padding:11px 0; width:100%;}
   .two-col{display:grid; grid-template-columns:1fr 1fr; gap:12px;}
@@ -259,7 +263,7 @@
   .toast.show{opacity:1; transform:translateX(-50%) translateY(0);}
 
   nav.tabs{position:absolute; bottom:0; left:0; right:0; display:flex; background:var(--nav-bg); backdrop-filter:blur(10px); -webkit-backdrop-filter:blur(10px); border-top:1px solid var(--divider); box-shadow:0 -8px 24px -8px rgba(0,0,0,.4); padding:10px calc(6px + env(safe-area-inset-right)) calc(10px + env(safe-area-inset-bottom)) calc(6px + env(safe-area-inset-left));}
-  .tab-btn{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; gap:4px; color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); letter-spacing:0.04em; padding:6px 2px; cursor:pointer; text-transform:uppercase; transition:color .2s var(--ease-native), transform .15s var(--ease-native);}
+  .tab-btn{flex:1; background:none; border:none; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px; min-height:var(--tap-min); color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); letter-spacing:0.04em; padding:6px 2px; cursor:pointer; text-transform:uppercase; transition:color .2s var(--ease-native), transform .15s var(--ease-native);}
   .tab-btn:active{transform:scale(.92);}
   .tab-btn svg{width:20px; height:20px; stroke:var(--text-muted); fill:none; stroke-width:1.7; transition:stroke .2s var(--ease-native), filter .2s var(--ease-native);}
   .tab-btn.active{color:var(--accent-amber);}
@@ -294,9 +298,46 @@
   .load-btn.v-solid-amber{background:var(--accent-amber); color:var(--bg-deep); border:1px solid transparent;}
   .load-btn.v-solid-purple{background:var(--accent-purple); color:var(--bg-deep); border:1px solid transparent;}
 
-  .icon-btn{display:inline-flex; align-items:center; justify-content:center; min-width:40px; min-height:40px; padding:8px; margin:-6px -6px -6px 0; background:transparent; border:none; color:var(--text-muted); font-size:16px; line-height:1; cursor:pointer; border-radius:var(--r-xs); -webkit-tap-highlight-color:transparent; flex-shrink:0;}
+  .icon-btn{display:inline-flex; align-items:center; justify-content:center; min-width:var(--tap-min); min-height:var(--tap-min); padding:8px; margin:-8px -8px -8px 0; background:transparent; border:none; color:var(--text-muted); font-size:16px; line-height:1; cursor:pointer; border-radius:var(--r-xs); -webkit-tap-highlight-color:transparent; flex-shrink:0;}
   .icon-btn:hover{color:var(--text-primary);}
   .icon-btn:active{opacity:.55;}
+
+  /* ============================================================
+     Phase 2: touch targets + small-screen leg row.
+     ============================================================ */
+  /* Day-level incentive flags — moved out of the cramped header row into
+     their own wrap row of 44px pill buttons (was <=16px tap-to-explain chips). */
+  .day-flags{display:flex; flex-wrap:wrap; gap:8px; margin:2px 0 10px;}
+  .day-flag{display:inline-flex; align-items:center; gap:6px; min-height:var(--tap-min); padding:0 12px; border-radius:var(--r-pill); border:1px solid var(--divider); background:var(--panel-raised); color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:var(--fs-caption); line-height:1.1; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+  .day-flag:active{opacity:.7;}
+  .day-flag b{font-weight:700;}
+  .day-flag--activity{border-color:var(--accent-purple);} .day-flag--activity b{color:var(--accent-purple);}
+  .day-flag--veteran{border-color:var(--danger);} .day-flag--veteran b{color:var(--danger);}
+  .day-flag--holiday{border-color:var(--accent-amber);} .day-flag--holiday b{color:var(--accent-amber);}
+  .day-flag--second{border-color:var(--accent-cyan);} .day-flag--second b{color:var(--accent-cyan);}
+  .day-flag--shabbat{border-color:var(--accent-cyan);} .day-flag--shabbat b{color:var(--accent-cyan);}
+
+  /* Roster leg — two compact lines + a clearly labelled full-width unscheduled toggle.
+     (.leg-row is still used, unchanged, by the import-preview panel.) */
+  .lg{padding:10px 0; border-bottom:1px solid var(--divider);}
+  .lg + .lg{padding-top:12px;}
+  .lg:last-of-type{border-bottom:none; padding-bottom:2px;}
+  .lg-l1{display:flex; justify-content:space-between; align-items:baseline; gap:12px;}
+  .lg-route{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:14.5px; color:var(--text-primary);}
+  .lg-time{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-caption); color:var(--text-muted); text-align:right; white-space:nowrap;}
+  .lg-l2{display:flex; align-items:center; gap:8px; margin-top:3px; min-height:26px;}
+  .lg-flt{font-family:'IBM Plex Mono', monospace; color:var(--accent-amber); font-size:var(--fs-caption); white-space:nowrap;}
+  .lg-block{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); color:var(--text-muted); white-space:nowrap;}
+  .lg-block--est{color:var(--accent-amber);}
+  .lg-shb{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); font-weight:700; letter-spacing:0.04em; color:var(--accent-cyan); border:1px solid var(--accent-cyan); border-radius:var(--r-xs); padding:2px 5px; white-space:nowrap;}
+  .lg-action{margin-left:auto;}
+  .lg-unsched{display:flex; align-items:center; gap:10px; min-height:var(--tap-min); margin-top:2px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
+  .lg-unsched input[type="checkbox"]{width:22px; height:22px; flex-shrink:0; margin:0; accent-color:var(--danger); cursor:pointer;}
+  .lg-unsched > span{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-caption); color:var(--text-muted);}
+  .lg-unsched input:checked ~ span{color:var(--danger);}
+
+  /* Import-preview clickable comparison row */
+  tr[role="button"] > td{padding-top:13px; padding-bottom:13px;}
 </style>
 </head>
 <body>
@@ -953,8 +994,17 @@
   }
 
   function activityBadge(idx){
+    // retained for backwards reference; roster now renders day flags via dayFlag() below
     if(idx == null) return '';
     return ` <span class="badge-chip" role="img" aria-label="Activity day ${idx} of the period" style="background:var(--accent-purple); border-color:var(--accent-purple); color:var(--bg-deep);" onclick="showToast('Activity day ${idx} this month — flight, layover, and instruction days count toward this; standby and paid days off don\\'t. Day 14+ earns the veteran incentive.')">${idx}</span>`;
+  }
+  const ACTIVITY_DAY_MSG = "flight, layover, and instruction days count toward this; standby and paid days off don't. Day 14+ earns the veteran incentive.";
+  function dayFlag(cls, key, label, msg){
+    const m = String(msg).replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+    return `<button type="button" class="day-flag day-flag--${cls}" data-msg="${m}" onclick="showToast(this.dataset.msg)" aria-label="${label}"><b>${key}</b> ${label}</button>`;
+  }
+  function activityDayFlag(li){
+    return dayFlag('activity', li, 'activity day', 'Activity day ' + li + ' this month — ' + ACTIVITY_DAY_MSG);
   }
 
   function computeActivityDayIndices(days){
@@ -1071,9 +1121,6 @@
       }
       if(d.code === 'DUTY'){
         const idx = dayIndex[d.date];
-        const veteranBadge = idx >= 14 ? ` <span class="badge-chip" role="img" aria-label="Veteran incentive day (14th activity day or later)" style="border-color:var(--danger);color:var(--danger)" onclick="showToast('Day ${idx} of activity (14th+) — 1.5x incentive')">V</span>` : '';
-        const holidayBadge = HOLIDAY_DATES.includes(d.date) ? ` <span class="badge-chip" role="img" aria-label="Holiday — flat double block credit" style="border-color:var(--accent-amber);color:var(--accent-amber)" onclick="showToast('Holiday date — flat 2x block credit')">H</span>` : '';
-        const secondActBadge = sameDayRank[i] >= 1 ? ` <span class="badge-chip" role="img" aria-label="Second separate flight activity this day" style="border-color:var(--accent-cyan);color:var(--accent-cyan)" onclick="showToast('2nd separate flight activity this calendar day — 1.5x')">2</span>` : '';
         const dayShabbat = isShabbatDay(d);
         const estimates = getRouteEstimates();
         const resolvedLegs = d.legs.map(l => resolveLegBlock(l, estimates));
@@ -1081,20 +1128,27 @@
         const anyEstimated = knownLegs.some(r => r.estimated);
         const dayTotalBlock = knownLegs.reduce((s, r) => s + r.block, 0);
         const totalLabel = (knownLegs.length === d.legs.length ? dayTotalBlock.toFixed(2) + 'h' : (knownLegs.length ? dayTotalBlock.toFixed(2) + 'h+' : '—')) + (anyEstimated ? ' (est.)' : '');
+        const flags = [];
+        if(idx != null) flags.push(activityDayFlag(idx));
+        if(idx >= 14) flags.push(dayFlag('veteran', 'V', '14th+ day &middot; 1.5&times;', 'Day ' + idx + ' of activity (14th+) — 1.5x incentive'));
+        if(HOLIDAY_DATES.includes(d.date)) flags.push(dayFlag('holiday', 'H', 'holiday &middot; flat 2&times;', 'Holiday date — flat 2x block credit'));
+        if(sameDayRank[i] >= 1) flags.push(dayFlag('second', '2', '2nd activity &middot; 1.5&times;', '2nd separate flight activity this calendar day — 1.5x'));
+        if(dayShabbat) flags.push(dayFlag('shabbat', 'S', 'Shabbat window', 'Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time) — whole day gets the incentive'));
         html += `<div class="stub" style="animation-delay:${i*0.02}s">
-          <div class="stub-head"><span>Report <b>${d.report}</b></span><span>Debrief <b>${d.debrief}</b> · <b style="color:${anyEstimated ? 'var(--accent-amber)' : 'var(--accent-cyan)'}">${totalLabel}</b>${d.indicator ? ' <span class=\"badge\">'+d.indicator+'</span>' : ''}${activityBadge(idx)}${veteranBadge}${holidayBadge}${secondActBadge}<button class="crew-btn${d.crew && d.crew.length ? ' has-crew' : ''}" onclick="showCrewModal(${i})" title="Crew" aria-label="Crew list for ${d.day} ${d.date}">👥</button></span></div>`;
+          <div class="stub-head"><span>Report <b>${d.report}</b></span><span>Debrief <b>${d.debrief}</b> · <b style="color:${anyEstimated ? 'var(--accent-amber)' : 'var(--accent-cyan)'}">${totalLabel}</b>${d.indicator ? ' <span class=\"badge\">'+d.indicator+'</span>' : ''}<button type="button" class="crew-btn${d.crew && d.crew.length ? ' has-crew' : ''}" onclick="showCrewModal(${i})" title="Crew" aria-label="Crew list for ${d.day} ${d.date}">👥</button></span></div>
+          ${flags.length ? '<div class="day-flags">' + flags.join('') + '</div>' : ''}`;
         d.legs.forEach((l, j) => {
-          const shabbat = dayShabbat;
           const resolved = resolvedLegs[j];
-          const blockTag = resolved.block == null ? '' : (resolved.estimated
-            ? ` <span class=\"mono\" style=\"color:var(--accent-amber); font-size:10px;\">(~${resolved.block.toFixed(2)}h est.)</span>`
-            : ` <span class=\"mono\" style=\"color:var(--text-muted); font-size:10px;\">(${resolved.block.toFixed(2)}h)</span>`);
-          html += `<div class="leg-row">
-            <label class="unsched-wrap" title="Unscheduled (1.5x)">
-              <input type="checkbox" class="unsched-check" data-day="${i}" data-leg="${j}" ${l.unschedDefault ? 'checked' : ''} onchange="recalcSalary(); renderReconComparison();">
-              <span class="cbox"></span>
-            </label>
-            <span class="leg-flt">${l.flt} [${l.ac}]</span><span class="leg-route">${l.from} → ${l.to}</span><span class="leg-time">${l.time == null ? '<span class=\"mono\" style=\"color:var(--danger)\">no time</span>' : l.time}${blockTag}${shabbat ? ` <span class=\"badge-chip\" role=\"img\" aria-label=\"Shabbat window touched\" style=\"border-color:var(--accent-cyan);color:var(--accent-cyan)\" onclick=\"showToast('Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time) — whole day gets the incentive')\">S</span>` : ''}<button class="crew-btn" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times" aria-label="Check actual times for flight ${l.flt}">🔍</button></span></div>`;
+          const blockTag = resolved.block == null ? ''
+            : (resolved.estimated
+              ? `<span class="mono lg-block lg-block--est">(~${resolved.block.toFixed(2)}h est.)</span>`
+              : `<span class="mono lg-block">(${resolved.block.toFixed(2)}h)</span>`);
+          const timeHtml = l.time == null ? '<span class="mono" style="color:var(--danger)">no time</span>' : l.time;
+          html += `<div class="lg">
+            <div class="lg-l1"><span class="lg-route">${l.from} → ${l.to}</span><span class="lg-time">${timeHtml}</span></div>
+            <div class="lg-l2"><span class="lg-flt">${l.flt} [${l.ac}]</span>${blockTag}${dayShabbat ? '<span class="lg-shb" role="img" aria-label="Shabbat window touched" title="Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time)">SHB</span>' : ''}<button type="button" class="crew-btn lg-action" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times" aria-label="Check actual times for flight ${l.flt}">🔍</button></div>
+            <label class="lg-unsched"><input type="checkbox" class="unsched-check" data-day="${i}" data-leg="${j}" ${l.unschedDefault ? 'checked' : ''} onchange="recalcSalary(); renderReconComparison();"><span>Unscheduled (1.5×)</span></label>
+          </div>`;
         });
         html += `<input type="text" class="trip-note-input" data-date="${d.date}" placeholder="Note for this trip (passport, uniform, etc.)" value="${(getTripNote(d.date) || '').replace(/"/g,'&quot;')}" onchange="saveTripNote('${d.date}', this.value)">`;
         html += `</div>`;
@@ -1106,12 +1160,16 @@
           <div class="standby-time">${d.standby}</div>
         </div>`;
       } else if(d.code === 'LAYOVER'){
+        const li = dayIndex[d.date];
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s">
-          <div class="stub-head"><span>${d.label}${activityBadge(dayIndex[d.date])}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
+          <div class="stub-head"><span>${d.label}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
+          ${li != null ? '<div class="day-flags">' + activityDayFlag(li) + '</div>' : ''}
         </div>`;
       } else if(d.code === 'INS'){
+        const li = dayIndex[d.date];
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s; border-color:var(--text-muted);">
-          <div class="stub-head"><span>${d.label}${activityBadge(dayIndex[d.date])}</span><span class="mono" style="font-size:11px">3.00h credit</span></div>
+          <div class="stub-head"><span>${d.label}</span><span class="mono" style="font-size:11px">3.00h credit</span></div>
+          ${li != null ? '<div class="day-flags">' + activityDayFlag(li) + '</div>' : ''}
           <div class="standby-time" style="color:var(--text-muted);">${d.standby}</div>
         </div>`;
       } else if(d.code === 'PM' || d.code === 'MEMO'){
