@@ -302,6 +302,15 @@
   .hint--plain{text-transform:none; letter-spacing:0;}
 
   .load-btn:disabled, .btn:disabled, .share-btn:disabled, .req-btn:disabled{opacity:.5; pointer-events:none; box-shadow:none;}
+  /* Busy/loading affordance — spinner + disabled state, no layout shift. Under
+     prefers-reduced-motion the global rule freezes the spin to a static ring, which
+     still reads as "working" alongside the disabled styling and the swapped label. */
+  @keyframes cb-spin{to{transform:rotate(360deg);}}
+  .load-btn[aria-busy="true"], .btn[aria-busy="true"], .share-btn[aria-busy="true"]{gap:8px;}
+  .load-btn[aria-busy="true"]::before, .btn[aria-busy="true"]::before, .share-btn[aria-busy="true"]::before{
+    content:''; width:15px; height:15px; flex-shrink:0; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:cb-spin .7s linear infinite;
+  }
+  .spin-inline{display:inline-block; width:12px; height:12px; margin-right:6px; vertical-align:-1px; border:2px solid currentColor; border-right-color:transparent; border-radius:50%; animation:cb-spin .7s linear infinite;}
   .load-btn.v-neutral{background:var(--panel); color:var(--text-primary); border:1px solid var(--divider); box-shadow:none;}
   .load-btn.v-cyan{background:var(--panel); color:var(--accent-cyan); border:1px solid var(--accent-cyan); box-shadow:none;}
   .load-btn.v-amber{background:var(--panel); color:var(--accent-amber); border:1px solid var(--accent-amber); box-shadow:none;}
@@ -379,7 +388,7 @@
       <button type="button" class="period-summary" id="period-summary" onclick="switchTab('salary')" hidden aria-label="Period summary, opens Salary Predictor"></button>
       <div id="roster-empty" class="roster-empty" hidden>
         <p class="help-text" style="margin-top:0; margin-bottom:12px;">No roster is loaded on this device yet.</p>
-        <button type="button" class="load-btn" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
+        <button type="button" class="load-btn js-load-roster" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
       </div>
       <div id="add-flight-form" style="display:none; margin-top:12px; border:1px solid var(--accent-cyan); border-radius:12px; padding:12px; background:var(--panel);">
         <h3 class="eyebrow" style="margin-bottom:8px;">Add Flight</h3>
@@ -494,7 +503,7 @@
         <button type="button" class="collapse-header" aria-expanded="true" onclick="toggleCollapse(this)"><span>Reconcile vs. Real Payslip</span><span class="collapse-chevron" aria-hidden="true">▾</span></button>
         <div class="collapse-body">
           <div class="help-text" style="margin-top:0;">Load your mid-month or end-of-month actual-times file — if it only covers half the period, the comparison automatically limits itself to whatever dates the file actually shows, instead of assuming the full month. This isn't about getting ₪0 difference — it's an audit tool: if Actual comes in below Predicted, that can mean crew assignment missed an incentive you were owed, worth double-checking with them.</div>
-          <button type="button" class="load-btn v-raised-cyan" onclick="document.getElementById('recon-file-input').click()">Load Fanfare</button>
+          <button type="button" class="load-btn v-raised-cyan" id="recon-load-btn" onclick="document.getElementById('recon-file-input').click()">Load Fanfare</button>
           <input type="file" id="recon-file-input" accept=".csv,.xlsx,.xls" class="sr-only" tabindex="-1" aria-hidden="true">
           <div id="recon-file-status" class="help-text" style="display:none; margin-top:8px;"></div>
           <div id="recon-file-result"></div>
@@ -669,8 +678,8 @@
       </div>
       <div class="help-text" style="margin-top:0;">Crew assignment counts as an unscheduled flight (1.5x incentive, or 2x if it also touches the Shabbat window). A swap doesn't — you were always going to be working that day, just with someone else, so it doesn't earn the "unscheduled" bonus.</div>
 
-      <button class="load-btn" onclick="computeWhatIf()">Calculate What-If</button>
-      <div id="wi-result" style="margin-top:16px;"></div>
+      <button class="load-btn" id="wi-calc-btn" onclick="computeWhatIf()">Calculate What-If</button>
+      <div id="wi-result" style="margin-top:16px;"><div class="help-text" style="margin-top:0;">Fill in the fields above, then tap <b>Calculate What-If</b> — the old vs. new salary comparison shows up here.</div></div>
     </section>
 
     <section class="tab-panel" id="panel-annual">
@@ -696,7 +705,7 @@
   <div class="crew-modal-overlay" id="manage-overlay" onclick="if(event.target===this) closeManageSheet()">
     <div class="crew-modal" id="manage-sheet" role="dialog" aria-modal="true" aria-labelledby="manage-title" tabindex="-1">
       <h2 class="crew-modal-title" id="manage-title">Manage Roster<button type="button" class="icon-btn" onclick="closeManageSheet()" aria-label="Close">✕</button></h2>
-      <button type="button" class="load-btn" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
+      <button type="button" class="load-btn js-load-roster" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
       <div id="parse-status" class="help-text" style="display:none; margin-top:10px;"></div>
       <div id="review-panel" style="display:none; margin-top:14px;"></div>
       <button type="button" class="load-btn v-cyan" id="edit-mode-btn" style="margin-top:8px;" onclick="toggleEditMode()">Enter Edit Mode</button>
@@ -834,6 +843,25 @@
     t.classList.add('show');
     setTimeout(()=>t.classList.remove('show'), 2200);
   }
+  // ---- Phase 4: shared busy-state helpers (pure UI — no effect on any calculation) ----
+  function setBtnBusy(btn, busy, busyLabel){
+    if(typeof btn === 'string') btn = document.getElementById(btn);
+    if(!btn) return;
+    btn.disabled = !!busy;
+    if(busy){
+      btn.setAttribute('aria-busy', 'true');
+      if(busyLabel != null){
+        if(btn.dataset.idleLabel == null) btn.dataset.idleLabel = btn.textContent;
+        btn.textContent = busyLabel;
+      }
+    } else {
+      btn.removeAttribute('aria-busy');
+      if(btn.dataset.idleLabel != null){ btn.textContent = btn.dataset.idleLabel; delete btn.dataset.idleLabel; }
+    }
+  }
+  function setRosterLoadBusy(busy){
+    document.querySelectorAll('.js-load-roster').forEach(b => setBtnBusy(b, busy, busy ? 'Reading…' : null));
+  }
   async function shareRoster(){
     const text = "My upcoming trips:\nSep 10-12: Home base -> ZZZ (2 nights)\nOther duty days: out and back same day\nSep 1: Home, paid leave";
     if(navigator.share){
@@ -855,6 +883,11 @@
 
   function generateFamilyImage(){
     const days = buildCalendarDays(); // reuses the same grouping logic as the Calendar tab
+    if(days.length === 0){
+      document.getElementById('family-image-container').innerHTML = '<div class="help-text" style="margin-top:0;">Load a roster first (Roster tab) — there\'s nothing to put on the calendar yet.</div>';
+      showToast('No roster loaded yet');
+      return;
+    }
     // Group into months, same shape the Calendar tab uses, but we need each month's own
     // leading-blank count and row count to lay out the canvas grid ahead of drawing.
     // Position is computed from each item's own day-of-month, not by sequentially counting
@@ -956,6 +989,7 @@
       <div class="help-text" style="margin-top:8px;">If the button doesn't open a save option, press and hold the image above and choose "Save Image" — that always works.</div>`;
 
     canvas.toBlob(blob => { window._familyImageBlob = blob; }, 'image/jpeg', 0.92);
+    showToast('Calendar image ready');
   }
 
   async function saveFamilyImage(){
@@ -1443,6 +1477,10 @@
   function renderCalendar(){
     const el = document.getElementById('calendar-body');
     const days = buildCalendarDays();
+    if(days.length === 0){
+      el.innerHTML = '<div class="roster-empty"><p class="help-text" style="margin-top:0; margin-bottom:12px;">No roster loaded yet — the calendar fills in automatically once you load one.</p><button type="button" class="load-btn" onclick="switchTab(\'roster\'); openManageSheet();">Load a Roster</button></div>';
+      return;
+    }
     let html = '';
     let currentMonth = null;
     let prevDayNum = null;
@@ -1766,11 +1804,16 @@
     const l = d && d.legs && d.legs[legIdx];
     if(!l){ return; }
     const btn = document.getElementById('check-actual-' + dayIdx + '-' + legIdx);
-    if(btn) btn.textContent = '…';
+    if(btn){
+      if(btn.dataset.busy) return; // ignore a rapid second tap while this leg is still checking
+      btn.dataset.busy = '1';
+      btn.style.pointerEvents = 'none';
+      btn.textContent = '…';
+    }
     const result = await fetchActualForLeg(apiKey, airlineCode, d, l);
     if(!result.ok){
       showToast((airlineCode + l.flt) + ': ' + result.message);
-      if(btn) btn.textContent = '🔍';
+      if(btn){ btn.textContent = '🔍'; btn.style.pointerEvents = ''; delete btn.dataset.busy; }
       return;
     }
     l.block = result.block;
@@ -1796,21 +1839,27 @@
     });
     if(targets.length === 0){ showToast('Nothing missing — every flight already has block hours'); return; }
     const btn = document.getElementById('check-all-btn');
+    if(btn && btn.disabled) return; // already running — ignore repeat taps
+    if(btn){ btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
+    showToast('Checking ' + targets.length + ' flight(s) against AviationStack…');
     let updated = 0, failed = 0;
-    for(let k = 0; k < targets.length; k++){
-      const {dayIdx, legIdx} = targets[k];
-      const d = rosterData[dayIdx];
-      const l = d && d.legs && d.legs[legIdx];
-      if(!l || l.block != null) continue; // may have been filled by a previous iteration if the same flight number appears twice
-      if(btn) btn.textContent = 'Checking ' + (k + 1) + '/' + targets.length + '…';
-      const result = await fetchActualForLeg(apiKey, airlineCode, d, l);
-      if(result.ok){ l.block = result.block; l.time = result.time; updated++; }
-      else failed++;
-      if(k < targets.length - 1) await new Promise(r => setTimeout(r, 300));
+    try{
+      for(let k = 0; k < targets.length; k++){
+        const {dayIdx, legIdx} = targets[k];
+        const d = rosterData[dayIdx];
+        const l = d && d.legs && d.legs[legIdx];
+        if(!l || l.block != null) continue; // may have been filled by a previous iteration if the same flight number appears twice
+        if(btn) btn.textContent = 'Checking ' + (k + 1) + '/' + targets.length + '…';
+        const result = await fetchActualForLeg(apiKey, airlineCode, d, l);
+        if(result.ok){ l.block = result.block; l.time = result.time; updated++; }
+        else failed++;
+        if(k < targets.length - 1) await new Promise(r => setTimeout(r, 300));
+      }
+    } finally {
+      renderRoster();
+      recalcSalary();
+      if(btn){ btn.textContent = 'Check All Missing Flights'; btn.disabled = false; btn.removeAttribute('aria-busy'); }
     }
-    renderRoster();
-    recalcSalary();
-    if(btn) btn.textContent = 'Check All Missing Flights';
     showToast('Updated ' + updated + ' of ' + targets.length + ' — ' + failed + ' had no data yet (probably still in the future)');
   }
 
@@ -1988,12 +2037,14 @@
     const panel = document.getElementById('layover-review-panel');
     if(gaps.length === 0){
       panel.innerHTML = '<div class="help-text" style="margin-top:8px;">No gaps found — every multi-day trip already has an explicit layover entry for each day in between.</div>';
+      showToast('No implied layover gaps found');
       return;
     }
     panel.innerHTML = `
       <div class="help-text" style="margin-top:8px;">Found ${gaps.length} day(s) with no entry at all, sitting between an outbound and inbound flight to the same city — these are almost certainly layover days your export just didn't include a row for:</div>
       ${gaps.map(g => `<div class="stub" style="margin-bottom:8px;"><span>${g.day} ${g.date} — Layover, ${g.city}</span></div>`).join('')}
       <button class="load-btn" style="background:#8B6FD9; border-color:#8B6FD9; color:#fff;" onclick="applyImplicitLayovers()">Add These ${gaps.length} Layover Day(s)</button>`;
+    showToast('Found ' + gaps.length + ' possible layover day(s) — review below');
   }
 
   function applyImplicitLayovers(){
@@ -2039,10 +2090,11 @@
     const totalBlock = parseFloat(document.getElementById('wi-block').value);
     const offerType = document.getElementById('wi-offer-type').value; // 'crew' or 'swap'
     const resultEl = document.getElementById('wi-result');
-    if(!date || !report || !debrief || !dest){ showToast('Fill in date, report, debrief, and destination'); return; }
-    if(isNaN(totalBlock) || totalBlock <= 0){ showToast('Enter total block hours for the round trip'); return; }
+    const wiError = msg => { resultEl.innerHTML = '<div class="help-text" style="margin-top:0; color:var(--danger);">' + msg + '</div>'; showToast(msg); };
+    if(!date || !report || !debrief || !dest){ wiError('Fill in date, report, debrief, and destination'); return; }
+    if(isNaN(totalBlock) || totalBlock <= 0){ wiError('Enter total block hours for the round trip'); return; }
     const dObj = buildDateObj(date, '12:00');
-    if(!dObj){ showToast('Date should be DD/MM'); return; }
+    if(!dObj){ wiError('Date should be DD/MM'); return; }
     const day = WEEK[dObj.getDay()];
     const perLeg = totalBlock / 2;
     const times = buildSyntheticLegTimes(report, [perLeg, perLeg]);
@@ -2165,16 +2217,19 @@
       status.textContent = "The PDF reader library didn't load (network/CDN blocked). Send the PDF to me in chat instead — that path always works.";
       return;
     }
-    status.textContent = 'Reading PDF…';
+    setRosterLoadBusy(true);
+    status.innerHTML = '<span class="spin-inline" aria-hidden="true"></span>Reading PDF…';
     try{
       const buf = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({data: buf}).promise;
       let fullText = '';
       for(let p = 1; p <= pdf.numPages; p++){
+        status.innerHTML = '<span class="spin-inline" aria-hidden="true"></span>Reading PDF… page ' + p + ' of ' + pdf.numPages;
         const page = await pdf.getPage(p);
         const content = await page.getTextContent();
         fullText += content.items.map(it => it.str).join(' ') + '\n';
       }
+      status.innerHTML = '<span class="spin-inline" aria-hidden="true"></span>Parsing duty rows…';
       const parsed = parseRosterText(fullText);
       if(parsed.days.length === 0){
         status.style.color = 'var(--danger)';
@@ -2183,9 +2238,12 @@
       }
       status.style.display = 'none';
       showReview(parsed);
+      showToast('Parsed ' + parsed.days.length + ' day(s) — review below');
     }catch(err){
       status.style.color = 'var(--danger)';
       status.textContent = "Couldn't read this PDF (" + err.message + "). Send it to me in chat instead.";
+    }finally{
+      setRosterLoadBusy(false);
     }
   }
 
@@ -2276,7 +2334,8 @@
       status.textContent = "The spreadsheet reader library didn't load (network/CDN blocked). Send the file to me in chat instead — that path always works.";
       return;
     }
-    status.textContent = 'Reading file…';
+    setRosterLoadBusy(true);
+    status.innerHTML = '<span class="spin-inline" aria-hidden="true"></span>Reading file…';
     try{
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, {type: 'array', cellDates: true});
@@ -2288,6 +2347,7 @@
         status.textContent = "This looks like a Fanfare actual-times file, not a roster export — use \"Load Fanfare\" in the Reconcile section (Salary tab) instead. Loading it here would corrupt your predicted roster.";
         return;
       }
+      status.innerHTML = '<span class="spin-inline" aria-hidden="true"></span>Parsing schedule table…';
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: '', raw: false});
       const isUTC = rows.some(r => r.some(c => /All times in UTC/i.test(String(c || ''))));
@@ -2299,9 +2359,12 @@
       }
       status.style.display = 'none';
       showReview({days: parsed.days, isUTC});
+      showToast('Parsed ' + parsed.days.length + ' day(s) — review below');
     } catch(err){
       status.style.color = 'var(--danger)';
       status.textContent = "Couldn't read this file (" + err.message + "). Send it to me in chat instead.";
+    } finally {
+      setRosterLoadBusy(false);
     }
   }
 
@@ -2814,10 +2877,12 @@
       status.textContent = "The spreadsheet reader library didn't load. Send the file to me in chat instead.";
       return;
     }
-    status.textContent = 'Reading file…';
+    setBtnBusy('recon-load-btn', true, 'Reading…');
+    status.innerHTML = '<span class="spin-inline" aria-hidden="true"></span>Reading file…';
     try{
       const buf = await file.arrayBuffer();
       const wb = XLSX.read(buf, {type: 'array', cellDates: true});
+      status.innerHTML = '<span class="spin-inline" aria-hidden="true"></span>Comparing against your prediction…';
       let parsedDays, extraNote = '', dutyTotals = null, pilotSummary = null;
       if(wb.Sheets['CurrentDataOps']){
         // This is the AIMS payroll workbook (CurrentDataOps/CurrentDataNFA raw data), a
@@ -2875,6 +2940,8 @@
     } catch(err){
       status.style.color = 'var(--danger)';
       status.textContent = "Couldn't read this file (" + err.message + "). Send it to me in chat instead.";
+    } finally {
+      setBtnBusy('recon-load-btn', false);
     }
   }
 
