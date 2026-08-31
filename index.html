@@ -1169,6 +1169,9 @@
     catch(e){ showToast('Could not save note — storage unavailable'); }
   }
 
+  // Display-only: returns a trimmed non-empty string, or '' — never null/undefined.
+  function dispVal(v){ return (v != null && String(v).trim() !== '') ? String(v).trim() : ''; }
+
   function renderRoster(){
     const el = document.getElementById('roster-list');
     const dayIndex = computeActivityDayIndices();
@@ -1198,8 +1201,9 @@
         if(HOLIDAY_DATES.includes(d.date)) flags.push(dayFlag('holiday', 'H', 'holiday &middot; flat 2&times;', 'Holiday date — flat 2x block credit'));
         if(sameDayRank[i] >= 1) flags.push(dayFlag('second', '2', '2nd activity &middot; 1.5&times;', '2nd separate flight activity this calendar day — 1.5x'));
         if(dayShabbat) flags.push(dayFlag('shabbat', 'S', 'Shabbat window', 'Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time) — whole day gets the incentive'));
+        const repHM = dispVal(d.report), debHM = dispVal(d.debrief);
         html += `<div class="stub" style="animation-delay:${i*0.02}s">
-          <div class="stub-head"><span>Report <b>${d.report}</b></span><span>Debrief <b>${d.debrief}</b> · <b style="color:${anyEstimated ? 'var(--accent-amber)' : 'var(--accent-cyan)'}">${totalLabel}</b>${d.indicator ? ' <span class=\"badge\">'+d.indicator+'</span>' : ''}<button type="button" class="crew-btn${d.crew && d.crew.length ? ' has-crew' : ''}" onclick="showCrewModal(${i})" title="Crew" aria-label="Crew list for ${d.day} ${d.date}">👥</button></span></div>
+          <div class="stub-head"><span>Report${repHM ? ' <b>' + repHM + '</b>' : ''}</span><span>Debrief${debHM ? ' <b>' + debHM + '</b>' : ''} · <b style="color:${anyEstimated ? 'var(--accent-amber)' : 'var(--accent-cyan)'}">${totalLabel}</b>${d.indicator ? ' <span class=\"badge\">'+d.indicator+'</span>' : ''}<button type="button" class="crew-btn${d.crew && d.crew.length ? ' has-crew' : ''}" onclick="showCrewModal(${i})" title="Crew" aria-label="Crew list for ${d.day} ${d.date}">👥</button></span></div>
           ${flags.length ? '<div class="day-flags">' + flags.join('') + '</div>' : ''}`;
         d.legs.forEach((l, j) => {
           const resolved = resolvedLegs[j];
@@ -1209,37 +1213,37 @@
               : `<span class="mono lg-block">(${resolved.block.toFixed(2)}h)</span>`);
           const timeHtml = l.time == null ? '<span class="mono" style="color:var(--danger)">no time</span>' : l.time;
           html += `<div class="lg">
-            <div class="lg-l1"><span class="lg-route">${l.from} → ${l.to}</span><span class="lg-time">${timeHtml}</span></div>
-            <div class="lg-l2"><span class="lg-flt">${l.flt} [${l.ac}]</span>${blockTag}${dayShabbat ? '<span class="lg-shb" role="img" aria-label="Shabbat window touched" title="Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time)">SHB</span>' : ''}<button type="button" class="crew-btn lg-action" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times" aria-label="Check actual times for flight ${l.flt}">🔍</button></div>
+            <div class="lg-l1"><span class="lg-route">${l.from || '?'} → ${l.to || '?'}</span><span class="lg-time">${timeHtml}</span></div>
+            <div class="lg-l2"><span class="lg-flt">${l.flt || '?'}${l.ac ? ' [' + l.ac + ']' : ''}</span>${blockTag}${dayShabbat ? '<span class="lg-shb" role="img" aria-label="Shabbat window touched" title="Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time)">SHB</span>' : ''}<button type="button" class="crew-btn lg-action" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times" aria-label="Check actual times for flight ${l.flt || ''}">🔍</button></div>
             <label class="lg-unsched"><input type="checkbox" class="unsched-check" data-day="${i}" data-leg="${j}" ${l.unschedDefault ? 'checked' : ''} onchange="recalcSalary(); renderReconComparison();"><span>Unscheduled (1.5×)</span></label>
           </div>`;
         });
         html += `<input type="text" class="trip-note-input" data-date="${d.date}" placeholder="Note for this trip (passport, uniform, etc.)" value="${(getTripNote(d.date) || '').replace(/"/g,'&quot;')}" onchange="saveTripNote('${d.date}', this.value)">`;
         html += `</div>`;
       } else if(d.code === 'CXL'){
-        html += `<div class="stub cxl"><span>${d.label}</span><span class="mono" style="font-size:11px">CXL · 3.00h credit</span></div>`;
+        html += `<div class="stub cxl"><span>${d.label || d.code}</span><span class="mono" style="font-size:11px">CXL · 3.00h credit</span></div>`;
       } else if(d.code === 'SBSM' || d.code === 'SBSE'){
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s">
-          <div class="stub-head"><span>${d.label}</span></div>
-          <div class="standby-time">${d.standby}</div>
+          <div class="stub-head"><span>${d.label || d.code}</span></div>
+          ${dispVal(d.standby) ? '<div class="standby-time">' + dispVal(d.standby) + '</div>' : ''}
         </div>`;
       } else if(d.code === 'LAYOVER'){
         const li = dayIndex[d.date];
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s">
-          <div class="stub-head"><span>${d.label}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
+          <div class="stub-head"><span>${d.label || d.code}</span><span class="mono" style="font-size:11px">$85 per diem</span></div>
           ${li != null ? '<div class="day-flags">' + activityDayFlag(li) + '</div>' : ''}
         </div>`;
       } else if(d.code === 'INS'){
         const li = dayIndex[d.date];
         html += `<div class="stub standby" style="animation-delay:${i*0.02}s; border-color:var(--text-muted);">
-          <div class="stub-head"><span>${d.label}</span><span class="mono" style="font-size:11px">3.00h credit</span></div>
+          <div class="stub-head"><span>${d.label || d.code}</span><span class="mono" style="font-size:11px">3.00h credit</span></div>
           ${li != null ? '<div class="day-flags">' + activityDayFlag(li) + '</div>' : ''}
-          <div class="standby-time" style="color:var(--text-muted);">${d.standby}</div>
+          ${dispVal(d.standby) ? '<div class="standby-time" style="color:var(--text-muted);">' + dispVal(d.standby) + '</div>' : ''}
         </div>`;
       } else if(d.code === 'PM' || d.code === 'MEMO'){
-        html += `<div class="stub off"><span>${d.label}</span><span class="mono" style="font-size:11px">${d.code}</span></div>`;
+        html += `<div class="stub off"><span>${d.label || d.code}</span><span class="mono" style="font-size:11px">${d.code}</span></div>`;
       } else {
-        html += `<div class="stub off"><span>${d.label}</span><span class="mono" style="font-size:11px">${d.code}</span></div>`;
+        html += `<div class="stub off"><span>${d.label || d.code}</span><span class="mono" style="font-size:11px">${d.code}</span></div>`;
       }
       html += `</div>`;
     });
@@ -2418,11 +2422,11 @@
       if(d.code === 'DUTY'){
         html += `<div class="stub"><div class="stub-head"><span>${d.day} ${d.date}</span><span>Report ${d.report || '?'} · Debrief ${d.debrief || '?'}${d.flatCredit ? ' <span class="badge">4-leg, flat 8h</span>' : ''}${d.crew && d.crew.length ? ' <span class="badge" style="border-color:var(--accent-cyan);color:var(--accent-cyan)">' + d.crew.length + ' crew</span>' : ''}</span></div>`;
         d.legs.forEach(l => {
-          html += `<div class="leg-row"><span class="leg-flt">${l.flt} [${l.ac}]</span><span class="leg-route">${l.from} → ${l.to}</span><span class="leg-time">${l.time || 'no time found'}${l.block != null ? ' · ' + l.block.toFixed(2) + 'h' : ''}</span></div>`;
+          html += `<div class="leg-row"><span class="leg-flt">${l.flt || '?'}${l.ac ? ' [' + l.ac + ']' : ''}</span><span class="leg-route">${l.from || '?'} → ${l.to || '?'}</span><span class="leg-time">${l.time || 'no time found'}${l.block != null ? ' · ' + l.block.toFixed(2) + 'h' : ''}</span></div>`;
         });
         html += `</div>`;
       } else {
-        html += `<div class="stub off"><span>${d.day} ${d.date} — ${d.label}</span></div>`;
+        html += `<div class="stub off"><span>${d.day} ${d.date} — ${d.label || d.code}</span></div>`;
       }
     });
     html += `<button class="share-btn" onclick="applyParsedRoster()">Apply to Roster</button>
