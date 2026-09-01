@@ -557,7 +557,14 @@
     </section>
 
     <section class="tab-panel" id="panel-settings">
-      <h2 class="eyebrow" style="margin-bottom:8px;">Appearance</h2>
+      <h2 class="eyebrow" style="margin-bottom:8px;">Home Base</h2>
+      <div class="field-group">
+        <label>Your home base airport (IATA) <span class="mono hint">(where your duties start &amp; end)</span></label>
+        <div class="input-wrap"><input type="text" id="home-base" value="" placeholder="e.g. TLV" maxlength="3" oninput="this.value=this.value.toUpperCase();"></div>
+      </div>
+      <div class="help-text" style="margin-top:0;">Set this before using <b>Fill Implied Layovers</b>, per-diem, or transportation totals. Until it's set the app won't guess your base from your roster — it just won't generate implied layover days. A layover is only ever proposed at a city that is <i>not</i> your home base.</div>
+
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Appearance</h2>
       <button type="button" class="load-btn v-neutral" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Theme: Dark</button>
 
       <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Pay Rates</h2>
@@ -605,6 +612,14 @@
       <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Route Block-Hour Estimates <span class="mono hint hint--plain">(fills in flights missing real times)</span></h2>
       <div class="help-text" style="margin-top:0;">Future/unflown legs have no real time data yet, so they show blank. One line per route, e.g. <span class="mono">TLV-BUD: 3.4</span> — any leg missing real block hours will use this as an estimate instead, clearly marked as estimated rather than confirmed. Direction matters if it differs (winds etc.) — add both TLV-BUD and BUD-TLV separately if needed.</div>
       <textarea id="route-estimates" rows="12" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:12px;" placeholder="TLV-BUD: 3.4&#10;BUD-TLV: 3.6&#10;TLV-JFK: 12.1&#10;JFK-TLV: 11.3"></textarea>
+
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Airport UTC Offsets <span class="mono hint hint--plain">(for "Local Station" roster imports)</span></h2>
+      <div class="help-text" style="margin-top:0;">Only used when an imported roster's times are in local station time rather than UTC. One line per airport, e.g. <span class="mono">BUD: 2</span> (hours ahead of UTC; use <span class="mono">-5</span> for behind). These are fixed offsets — they don't follow daylight-saving, so a UTC roster export is always more accurate. A leg whose airport has no offset here keeps its block time as unknown rather than guessing.</div>
+      <textarea id="airport-offsets" rows="6" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:12px;" placeholder="TLV: 3&#10;BUD: 2&#10;JFK: -4"></textarea>
+
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Roster Data</h2>
+      <div class="help-text" style="margin-top:0;">Your roster is saved on this device only (browser local storage) — it is never uploaded anywhere. Loading a roster, adding/editing/cancelling flights, and adding implied layovers all save automatically. This button wipes the saved copy and restores the built-in sample roster.</div>
+      <button type="button" class="load-btn v-danger" onclick="clearSavedRoster()">Clear saved roster / reset sample data</button>
     </section>
 
     <section class="tab-panel" id="panel-swap">
@@ -1044,6 +1059,80 @@
       legs:[{flt:'401',ac:'320',from:'XXX',to:'EIL',time:'09:00 – 10:00',block:1.0},{flt:'402',ac:'320',from:'EIL',to:'XXX',time:'11:00 – 12:00',block:1.0}]}
   ];
 
+  // ============================================================================
+  //  Home Base + local roster persistence (public-app configuration layer)
+  // ============================================================================
+  // getHomeBase() is the ONE authoritative accessor for the base. Every runtime
+  // path uses it — never the compile-time `HOME` placeholder directly.
+  function getHomeBase(){
+    let v = null;
+    try { const el = document.getElementById('home-base'); v = el ? el.value : null; } catch(e){}
+    if(!v){ try { v = (JSON.parse(localStorage.getItem('crewboard-fields') || '{}'))['home-base']; } catch(e){} }
+    v = String(v || '').trim().toUpperCase();
+    return /^[A-Z]{3}$/.test(v) ? v : HOME;   // HOME: 'TLV' in crewboard.html, 'XXX' in the public template
+  }
+  function isHomeBaseConfigured(){
+    const h = getHomeBase();
+    return !!h && h !== 'XXX';
+  }
+
+  // Airport UTC offsets for Local-Station (non-UTC) imports. Built-in constant,
+  // overlaid with a user-maintained Settings list. Approximate — a fixed offset
+  // does not follow daylight-saving; a UTC export is exact.
+  function getAirportOffsets(){
+    const merged = Object.assign({}, AIRPORT_UTC_OFFSET);
+    let text = '';
+    try { const el = document.getElementById('airport-offsets'); text = el ? el.value : ''; } catch(e){}
+    if(!text){ try { text = (JSON.parse(localStorage.getItem('crewboard-fields') || '{}'))['airport-offsets'] || ''; } catch(e){} }
+    String(text).split('\n').forEach(line => {
+      const m = line.match(/([A-Za-z]{3})\s*[:=]\s*(-?\d+(?:\.\d+)?)/);
+      if(m) merged[m[1].toUpperCase()] = parseFloat(m[2]);
+    });
+    return merged;
+  }
+
+  // Local-only roster persistence. Never uploaded anywhere.
+  const ROSTER_STORE_KEY = 'crewboard-roster';
+  function validateRoster(arr){
+    if(!Array.isArray(arr) || arr.length === 0 || arr.length > 400) return false;
+    return arr.every(d =>
+      d && typeof d === 'object'
+      && typeof d.date === 'string' && /^\d{2}\/\d{2}$/.test(d.date)
+      && typeof d.code === 'string' && d.code.length > 0 && d.code.length < 12
+      && (d.legs === undefined || (Array.isArray(d.legs) && d.legs.every(l =>
+           l && typeof l === 'object'
+           && (l.block === undefined || l.block === null || (typeof l.block === 'number' && isFinite(l.block)))
+           && (l.from === undefined || typeof l.from === 'string')
+           && (l.to === undefined || typeof l.to === 'string')
+         )))
+    );
+  }
+  function saveRoster(){
+    try { localStorage.setItem(ROSTER_STORE_KEY, JSON.stringify(rosterData)); } catch(e){}
+  }
+  const SAMPLE_ROSTER = JSON.parse(JSON.stringify(rosterData)); // snapshot before any restore
+  function clearSavedRoster(){
+    try { localStorage.removeItem(ROSTER_STORE_KEY); } catch(e){}
+    rosterData.length = 0;
+    SAMPLE_ROSTER.forEach(d => rosterData.push(JSON.parse(JSON.stringify(d))));
+    if(typeof renderRoster === 'function'){
+      renderRoster(); renderCalendar(); renderNextDuty();
+      renderAvailableWindows(); renderFTL(); recalcSalary();
+    }
+    if(typeof showToast === 'function') showToast('Saved roster cleared — showing sample data');
+  }
+  (function restoreSavedRoster(){
+    let raw;
+    try { raw = localStorage.getItem(ROSTER_STORE_KEY); } catch(e){ return; }
+    if(!raw) return;
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch(e){ return; }
+    if(validateRoster(parsed)){
+      rosterData.length = 0;
+      parsed.forEach(d => rosterData.push(d));
+    }
+  })();
+
   // ---- Shabbat window auto-detection ----
   // Assumes leg/report times are UTC (Israel local = UTC+3). A leg is flagged if either:
   // (a) its landing (arrival) falls on Friday after 19:00 Israel time, or
@@ -1167,11 +1256,12 @@
     // A "segment" is one round trip back to HOME. A leg sequence that never returns to HOME
     // within the day (e.g. the outbound half of a multi-day layover pairing) is its own
     // trailing one-leg segment.
+    const home = getHomeBase();
     const segments = [];
     let current = [];
     legs.forEach(l => {
       current.push(l);
-      if(l.to === HOME){ segments.push(current); current = []; }
+      if(l.to === home){ segments.push(current); current = []; }
     });
     if(current.length) segments.push(current);
     return segments;
@@ -1181,7 +1271,8 @@
     // pairing) = 5h; a same-day round trip ("סבב") of 2+ legs out of/into Ben Gurion = 4h;
     // the Ben Gurion–Eilat–Ben Gurion round trip specifically = 3h.
     if(segment.length === 1) return 5;
-    const eilatOnly = segment.every(l => (l.from === HOME || l.from === EILAT_CODE) && (l.to === HOME || l.to === EILAT_CODE))
+    const home = getHomeBase();
+    const eilatOnly = segment.every(l => (l.from === home || l.from === EILAT_CODE) && (l.to === home || l.to === EILAT_CODE))
       && segment.some(l => l.from === EILAT_CODE || l.to === EILAT_CODE);
     return eilatOnly ? 3 : 4;
   }
@@ -1473,7 +1564,8 @@
       let dests = [];
       if(chosen.code === 'DUTY' && chosen.legs){
         const seen = new Set();
-        chosen.legs.forEach(l => { if(l.to && l.to !== HOME && !seen.has(l.to)){ seen.add(l.to); dests.push(l.to); } });
+        const _home = getHomeBase();
+        chosen.legs.forEach(l => { if(l.to && l.to !== _home && !seen.has(l.to)){ seen.add(l.to); dests.push(l.to); } });
       } else if(chosen.code === 'LAYOVER'){
         const c = extractDestCode(chosen.label);
         if(c) dests.push(c);
@@ -1638,6 +1730,7 @@
       return {name: parts[0].trim(), position: parts.length > 1 ? parts.slice(1).join(' - ').trim() : ''};
     });
     rosterData[i].crew = crew;
+    saveRoster();
     closeCrewModal();
     renderRoster();
     showToast('Crew saved');
@@ -1826,6 +1919,7 @@
     }
     l.block = result.block;
     l.time = result.time;
+    saveRoster();
     renderRoster();
     recalcSalary();
     showToast('Updated ' + airlineCode + l.flt + ' — ' + result.block.toFixed(2) + 'h. Double-check the date/route match before trusting it!');
@@ -1864,6 +1958,7 @@
         if(k < targets.length - 1) await new Promise(r => setTimeout(r, 300));
       }
     } finally {
+      if(updated > 0) saveRoster();
       renderRoster();
       recalcSalary();
       if(btn){ btn.textContent = 'Check All Missing Flights'; btn.disabled = false; btn.removeAttribute('aria-busy'); }
@@ -1885,6 +1980,7 @@
     if(!d || d.code !== 'DUTY') return;
     const route = d.legs && d.legs.length ? d.legs.map(l => l.from).concat(d.legs[d.legs.length-1].to).join('-') : '';
     rosterData[i] = {date: d.date, day: d.day, code: 'CXL', label: 'Cancelled' + (route ? ' — was ' + route : '')};
+    saveRoster();
     renderRoster();
     renderCalendar();
     renderNextDuty();
@@ -1896,6 +1992,7 @@
 
   function removeEntry(i){
     rosterData.splice(i, 1);
+    saveRoster();
     renderRoster();
     renderCalendar();
     renderNextDuty();
@@ -2008,6 +2105,7 @@
       }
     }
     rosterData.splice(insertIdx, 0, entry);
+    saveRoster();
   }
 
   function detectImplicitLayoverGaps(){
@@ -2018,13 +2116,16 @@
     // consecutive DUTY entries where the first one lands away from home and the next one
     // departs from that exact same city, with calendar dates in between that have no entry at
     // all — never touches a date that already has SOME entry, real or otherwise.
+    const home = getHomeBase();
     const gaps = [];
+    if(!isHomeBaseConfigured()) return gaps; // never guess an implied layover without a base
     const dutyEntries = rosterData.filter(d => d.code === 'DUTY' && d.legs && d.legs.length);
     for(let k = 0; k < dutyEntries.length - 1; k++){
       const cur = dutyEntries[k], next = dutyEntries[k+1];
       const curEndCity = cur.legs[cur.legs.length - 1].to;
       const nextStartCity = next.legs[0].from;
-      if(!curEndCity || curEndCity === HOME || curEndCity !== nextStartCity) continue;
+      // Never propose the home base as a layover city.
+      if(!curEndCity || curEndCity === home || curEndCity !== nextStartCity) continue;
       const curDateObj = buildDateObj(cur.date, '12:00');
       const nextDateObj = buildDateObj(next.date, '12:00');
       if(!curDateObj || !nextDateObj) continue;
@@ -2041,8 +2142,13 @@
   }
 
   function fillImplicitLayovers(){
-    const gaps = detectImplicitLayoverGaps();
     const panel = document.getElementById('layover-review-panel');
+    if(!isHomeBaseConfigured()){
+      panel.innerHTML = '<div class="help-text" style="margin-top:8px; color:var(--danger);">Set your Home Base in Settings before filling implied layovers.</div>';
+      showToast('Set your Home Base in Settings first');
+      return;
+    }
+    const gaps = detectImplicitLayoverGaps();
     if(gaps.length === 0){
       panel.innerHTML = '<div class="help-text" style="margin-top:8px;">No gaps found — every multi-day trip already has an explicit layover entry for each day in between.</div>';
       showToast('No implied layover gaps found');
@@ -2056,9 +2162,11 @@
   }
 
   function applyImplicitLayovers(){
+    if(!isHomeBaseConfigured()){ showToast('Set your Home Base in Settings first'); return; }
     const gaps = detectImplicitLayoverGaps(); // recompute fresh in case anything changed since review
     gaps.forEach(g => insertRosterEntry({date: g.date, day: g.day, code: 'LAYOVER', label: 'Layover — ' + g.city + ' (inferred from gap)'}));
     document.getElementById('layover-review-panel').innerHTML = `<div class="help-text" style="margin-top:8px; color:#8B6FD9;">Added ${gaps.length} layover day(s). Your activity-day count and per-diem total now reflect them.</div>`;
+    saveRoster();
     renderRoster();
     renderCalendar();
     recalcSalary();
@@ -2085,8 +2193,9 @@
     const dest = document.getElementById('wi-dest').value.trim().toUpperCase();
     if(!dest) return;
     const estimates = getForecastEstimates();   // What-If is a forecast — pre-fill from the route table too
-    const out = estimates[HOME + '-' + dest];
-    const back = estimates[dest + '-' + HOME];
+    const home = getHomeBase();
+    const out = estimates[home + '-' + dest];
+    const back = estimates[dest + '-' + home];
     if(out != null && back != null) document.getElementById('wi-block').value = (out + back).toFixed(2);
   }
 
@@ -2107,9 +2216,10 @@
     const perLeg = totalBlock / 2;
     const times = buildSyntheticLegTimes(report, [perLeg, perLeg]);
     const isUnscheduled = offerType === 'crew';
+    const wiHome = getHomeBase();
     const legs = [
-      {flt: 'WI', ac: '320', from: HOME, to: dest, time: times[0], block: perLeg},
-      {flt: 'WI', ac: '320', from: dest, to: HOME, time: times[1], block: perLeg}
+      {flt: 'WI', ac: '320', from: wiHome, to: dest, time: times[0], block: perLeg},
+      {flt: 'WI', ac: '320', from: dest, to: wiHome, time: times[1], block: perLeg}
     ];
     const hypotheticalDay = {date, day, code: 'DUTY', report, debrief, legs};
 
@@ -2288,7 +2398,14 @@
             const dep = middle[idx * 2], arr = middle[idx * 2 + 1];
             if(dep && arr){
               leg.time = dep[1] + ' – ' + arr[1] + (arr[2] ? '⁺¹' : '');
-              if(isUTC) leg.block = computeUtcBlock(dep[1], arr[1], !!arr[2]);
+              if(isUTC){
+                leg.block = computeUtcBlock(dep[1], arr[1], !!arr[2]);
+              } else {
+                // Local Station times — convert via configured airport offsets.
+                // Unknown offset -> block stays null (never invented).
+                const converted = localLegToUtc(dep[1], leg.from, arr[1], leg.to, !!arr[2]);
+                if(converted){ leg.block = converted.block; leg.time = converted.time; }
+              }
             }
           });
         }
@@ -2311,11 +2428,12 @@
 
   function localLegToUtc(depLocalHM, depAirport, arrLocalHM, arrAirport, arrMarkedPlusOne){
     // A Local Station export gives departure in the FROM airport's local time and arrival in
-    // the TO airport's local time — two different clocks. Convert each to UTC using
-    // AIRPORT_UTC_OFFSET, then the normal duration math applies. Returns null if either
-    // airport's offset isn't known.
-    const depOffset = AIRPORT_UTC_OFFSET[depAirport];
-    const arrOffset = AIRPORT_UTC_OFFSET[arrAirport];
+    // the TO airport's local time — two different clocks. Convert each to UTC using the
+    // configured airport offsets, then the normal duration math applies. Returns null if
+    // either airport's offset isn't known — block hours stay unknown rather than wrong.
+    const offsets = getAirportOffsets();
+    const depOffset = offsets[depAirport];
+    const arrOffset = offsets[arrAirport];
     if(depOffset == null || arrOffset == null) return null;
     const [dh, dm] = depLocalHM.split(':').map(Number);
     const [ah, am] = arrLocalHM.split(':').map(Number);
@@ -2511,6 +2629,7 @@
     rosterData.length = 0;
     pendingParsedDays.forEach(d => rosterData.push(d));
     pendingParsedDays = null;
+    saveRoster();
     document.getElementById('review-panel').style.display = 'none';
     document.getElementById('review-panel').innerHTML = '';
     document.getElementById('pdf-input').value = '';
@@ -2613,7 +2732,7 @@
     const estimates = opts.forecast === true ? getForecastEstimates() : getRouteEstimates();
     const dayIndex = computeActivityDayIndices(days);
     const sameDayRank = computeSameDayDutyRank(days);
-    let block = 0, baseBlock = 0, completion = 0, missingCount = 0, estimatedCount = 0, estimatedBlockHours = 0, rawBlockHours = 0, tripTimeTotal = 0;
+    let block = 0, baseBlock = 0, completion = 0, missingCount = 0, estimatedCount = 0, estimatedBlockHours = 0, realBlockHours = 0, rawBlockHours = 0, tripTimeTotal = 0;
     days.forEach((d, i) => {
       if(d.code !== 'DUTY') return;
       if(maxDateObj){
@@ -2625,7 +2744,7 @@
       if(d.flatCredit){
         block += d.flatCredit * veteranMult;
         baseBlock += d.flatCredit;
-        if(d.legs) d.legs.forEach(l => { const resolved = resolveLegBlock(l, estimates); if(resolved.block != null){ rawBlockHours += resolved.block; if(resolved.estimated) estimatedBlockHours += resolved.block; } });
+        if(d.legs) d.legs.forEach(l => { const resolved = resolveLegBlock(l, estimates); if(resolved.block != null){ rawBlockHours += resolved.block; if(resolved.blockSource === 'roster') realBlockHours += resolved.block; else if(resolved.estimated) estimatedBlockHours += resolved.block; } });
         tripTimeTotal += computeTripTimeHours(d);
         return; // flatCredit is a manual override already above any per-segment minimum
       }
@@ -2635,6 +2754,7 @@
         const resolved = resolveLegBlock(l, estimates);
         if(resolved.block == null){ missingCount++; dayHasMissing = true; return; }
         if(resolved.estimated){ estimatedCount++; estimatedBlockHours += resolved.block; }
+        if(resolved.blockSource === 'roster') realBlockHours += resolved.block;
         rawBlockHours += resolved.block;
         dayRawBlock += resolved.block;
         baseBlock += resolved.block;
@@ -2664,7 +2784,7 @@
     const overageExcess = Math.max(0, rawBlockHours - MONTHLY_BLOCK_THRESHOLD);
     const overageBonus = overageExcess * 0.5; // the +0.5/hr on top of the 1x already counted above
     const totalIncentives = (block - baseBlock) + overageBonus;
-    return {block, completion, missingCount, estimatedCount, estimatedBlockHours, rawBlockHours, overageExcess, overageBonus, totalIncentives, tripTimeTotal};
+    return {block, completion, missingCount, estimatedCount, estimatedBlockHours, realBlockHours, rawBlockHours, overageExcess, overageBonus, totalIncentives, tripTimeTotal};
   }
 
   function computeIncentiveDetail(days, maxDateObj, getUnsched){
@@ -2680,7 +2800,7 @@
       if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return; }
       const veteranMult = (dayIndex[d.date] >= 14) ? 1.5 : 1;
       const secondActivityMult = (sameDayRank[i] >= 1) ? 1.5 : 1;
-      const dests = d.legs ? [...new Set(d.legs.map(l => l.to).filter(c => c && c !== HOME))] : [];
+      const dests = d.legs ? [...new Set(d.legs.map(l => l.to).filter(c => c && c !== getHomeBase()))] : [];
       const label = dests.length ? dests.join('/') : (d.legs && d.legs[0] ? d.legs[0].to : '');
       // Display-only: full <origin>-<destination> of the leg(s) that earned the
       // incentive, from the leg's own from/to fields (not inferred from HOME).
@@ -2761,7 +2881,7 @@
     const perDiemILS = perDiemPay * fx;
     const totalIncome = creditPay + seniority + transportPay + perDiemILS;
 
-    return {totalIncome, totalCreditHours, flightDays, transportUnits, perDiemUnits, missingCount: core.missingCount, estimatedCount: core.estimatedCount, estimatedBlockHours: core.estimatedBlockHours, rawBlockHours: core.rawBlockHours, tripTimeTotal, completion, block: core.block, totalIncentives: core.totalIncentives};
+    return {totalIncome, totalCreditHours, flightDays, transportUnits, perDiemUnits, missingCount: core.missingCount, estimatedCount: core.estimatedCount, estimatedBlockHours: core.estimatedBlockHours, realBlockHours: core.realBlockHours, rawBlockHours: core.rawBlockHours, tripTimeTotal, completion, block: core.block, totalIncentives: core.totalIncentives};
   }
 
   // ---- AIMS payroll workbook parser (a different file than the "Personal Schedule Report" —
@@ -3095,13 +3215,14 @@
     // layover pairing is 2 units total (the outbound day, the return day) — the layover days
     // in between contribute nothing.
     days = days || rosterData;
+    const home = getHomeBase();
     let units = 0;
     days.forEach(d => {
       if(d.code !== 'DUTY' || !d.legs || d.legs.length === 0) return;
       if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return; }
       const firstLeg = d.legs[0], lastLeg = d.legs[d.legs.length - 1];
-      if(firstLeg.from === HOME) units++;
-      if(lastLeg.to === HOME) units++;
+      if(firstLeg.from === home) units++;
+      if(lastLeg.to === home) units++;
     });
     return units;
   }
@@ -3113,10 +3234,11 @@
     days.forEach(d => {
       if(maxDateObj){ const dObj = buildDateObj(d.date, '23:59'); if(dObj && dObj > maxDateObj) return; }
       if(d.code === 'DUTY' && d.legs){
+        const home = getHomeBase();
         const dests = new Set();
         d.legs.forEach(l => {
-          if(l.from && l.from !== HOME && !EXCLUDED.includes(l.from)) dests.add(l.from);
-          if(l.to && l.to !== HOME && !EXCLUDED.includes(l.to)) dests.add(l.to);
+          if(l.from && l.from !== home && !EXCLUDED.includes(l.from)) dests.add(l.from);
+          if(l.to && l.to !== home && !EXCLUDED.includes(l.to)) dests.add(l.to);
         });
         units += dests.size;
       } else if(d.code === 'LAYOVER'){
@@ -3140,7 +3262,7 @@
     const gaCancelled = parseFloat(document.getElementById('ga-cancelled').value) || 0;
     const gaTotal = gaTraining + gaProject + gaSpecialCall + gaCancelled;
 
-    const {block: blockCredit, completion, missingCount, estimatedCount, estimatedBlockHours, rawBlockHours, overageExcess, overageBonus, totalIncentives} = calcCreditBreakdown();
+    const {block: blockCredit, completion, missingCount, estimatedCount, estimatedBlockHours, realBlockHours, rawBlockHours, overageExcess, overageBonus, totalIncentives} = calcCreditBreakdown();
     const standbyCredit = countCode('SBSM') * STANDBY_UNIT + countCode('SBSE') * STANDBY_UNIT;
     const paidoffCredit = countCode('OFFP') * PAIDOFF_UNIT;
     const insCredit = countCode('INS') * INS_UNIT;
@@ -3159,12 +3281,13 @@
 
     document.getElementById('brk-block').textContent = blockCredit.toFixed(2) + 'h';
     document.getElementById('brk-overage').textContent = overageBonus.toFixed(2) + 'h';
-    document.getElementById('brk-overage-sub').textContent = rawBlockHours.toFixed(2) + 'h flown this period' + (estimatedBlockHours > 0.01 ? ' (incl. ~' + estimatedBlockHours.toFixed(1) + 'h estimated)' : '') + ' · ' + overageExcess.toFixed(2) + 'h above the ' + MONTHLY_BLOCK_THRESHOLD + 'h threshold';
+    document.getElementById('brk-overage-sub').textContent = realBlockHours.toFixed(2) + 'h real block flown this period' + (estimatedBlockHours > 0.01 ? ' + ~' + estimatedBlockHours.toFixed(1) + 'h estimated (forecast only)' : '') + ' · overage bonus applies to the ' + overageExcess.toFixed(2) + 'h above ' + MONTHLY_BLOCK_THRESHOLD + 'h';
 
-    const blockPct = Math.min(100, (rawBlockHours / MONTHLY_BLOCK_THRESHOLD) * 100);
-    document.getElementById('thresh-block-label').textContent = rawBlockHours.toFixed(2) + 'h / ' + MONTHLY_BLOCK_THRESHOLD + 'h';
+    // "Block hours flown" gauge = REAL roster/actual block only (no estimates).
+    const blockPct = Math.min(100, (realBlockHours / MONTHLY_BLOCK_THRESHOLD) * 100);
+    document.getElementById('thresh-block-label').textContent = realBlockHours.toFixed(2) + 'h / ' + MONTHLY_BLOCK_THRESHOLD + 'h';
     document.getElementById('thresh-block-fill').style.width = blockPct + '%';
-    document.getElementById('thresh-block-fill').style.background = rawBlockHours > MONTHLY_BLOCK_THRESHOLD ? 'var(--accent-amber)' : 'var(--accent-cyan)';
+    document.getElementById('thresh-block-fill').style.background = realBlockHours > MONTHLY_BLOCK_THRESHOLD ? 'var(--accent-amber)' : 'var(--accent-cyan)';
     const DUTY_DAY_QUOTA = 13;
     const dutyPct = Math.min(100, (flightDays / DUTY_DAY_QUOTA) * 100);
     document.getElementById('thresh-duty-label').textContent = flightDays + ' / ' + DUTY_DAY_QUOTA;
@@ -3212,7 +3335,7 @@
   recalcSalary();
 
   // ---- Persist reconciliation + annual-tracker fields across visits (this device only) ----
-  const PERSISTED_FIELDS = ['recon-actual','ann-dutydays','rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','flight-api-key','flight-airline-code','ftl-cap-duty7','ftl-cap-duty14','ftl-cap-duty28','ftl-cap-month','ftl-cap-3mo','ftl-cap-12mo','route-estimates','drive-time-minutes'];
+  const PERSISTED_FIELDS = ['recon-actual','ann-dutydays','rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','flight-api-key','flight-airline-code','ftl-cap-duty7','ftl-cap-duty14','ftl-cap-duty28','ftl-cap-month','ftl-cap-3mo','ftl-cap-12mo','route-estimates','drive-time-minutes','home-base','airport-offsets'];
   (function loadPersistedFields(){
     let saved = {};
     try{ saved = JSON.parse(localStorage.getItem('crewboard-fields') || '{}'); } catch(e){}
@@ -3231,6 +3354,8 @@
       try{ localStorage.setItem('crewboard-fields', JSON.stringify(saved)); } catch(e){}
       if(id.indexOf('ftl-cap-') === 0) renderFTL();
       if(id === 'route-estimates'){ renderRoster(); recalcSalary(); }
+      // Home base / airport offsets feed the layover, per-diem, transport and import logic.
+      if(id === 'home-base' || id === 'airport-offsets'){ renderRoster(); renderCalendar(); renderAvailableWindows(); recalcSalary(); }
     });
   });
 

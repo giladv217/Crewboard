@@ -3,7 +3,8 @@
 //
 // Bump CACHE_NAME any time the app's cached files change meaningfully, so returning users
 // get the fresh version instead of being stuck on a stale cached copy.
-const CACHE_NAME = 'crewboard-v1';
+// v2: Home Base setting + local roster persistence + real-vs-forecast block split.
+const CACHE_NAME = 'crewboard-v2';
 
 const APP_SHELL = [
   './',
@@ -36,7 +37,12 @@ self.addEventListener('install', (event) => {
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     caches.keys().then((names) =>
-      Promise.all(names.filter((n) => n !== CACHE_NAME).map((n) => caches.delete(n)))
+      // Only drop OUR old caches — don't touch anything another app on this origin owns.
+      Promise.all(
+        names
+          .filter((n) => n.startsWith('crewboard-') && n !== CACHE_NAME)
+          .map((n) => caches.delete(n))
+      )
     ).then(() => self.clients.claim())
   );
 });
