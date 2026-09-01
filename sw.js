@@ -4,7 +4,9 @@
 // Bump CACHE_NAME any time the app's cached files change meaningfully, so returning users
 // get the fresh version instead of being stuck on a stale cached copy.
 // v2: Home Base setting + local roster persistence + real-vs-forecast block split.
-const CACHE_NAME = 'crewboard-v2';
+// v3: timezone-aware local-station XLSX import + chronological incentive-day ordering.
+// v4: backend flight-status enrichment (cross-origin API responses are never cached).
+const CACHE_NAME = 'crewboard-v4';
 
 const APP_SHELL = [
   './',
@@ -50,6 +52,16 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   // Only handle GET requests — POST/PUT etc. (none in this app, but just in case) pass through.
   if(event.request.method !== 'GET') return;
+
+  // Handle same-origin requests and the explicitly listed APP_SHELL CDN URLs only.
+  // Everything else cross-origin — notably the CrewBoard backend Worker's
+  // flight-status API — passes straight through to the network and is NEVER put in
+  // the cache. Those responses are dynamic and must not be served stale.
+  const reqUrl = new URL(event.request.url);
+  const isShellUrl = APP_SHELL.some((u) => {
+    try { return new URL(u, self.location.href).href === reqUrl.href; } catch(e){ return false; }
+  });
+  if(reqUrl.origin !== self.location.origin && !isShellUrl) return;
 
   event.respondWith(
     caches.match(event.request).then((cached) => {

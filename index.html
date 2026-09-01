@@ -357,6 +357,15 @@
   .lg-unsched input[type="checkbox"]{width:22px; height:22px; flex-shrink:0; margin:0; accent-color:var(--danger); cursor:pointer;}
   .lg-unsched > span{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-caption); color:var(--text-muted);}
   .lg-unsched input:checked ~ span{color:var(--danger);}
+  /* Live flight-status enrichment (backend cache) — deliberately set apart from
+     the roster-authoritative scheduled/actual text above it: dashed box, cyan
+     left rule, "✈ live" tag. Amber rule when the cached data is stale. */
+  .lg-fs{display:flex; flex-wrap:wrap; align-items:baseline; gap:3px 8px; margin-top:6px; padding:5px 8px; border:1px dashed var(--divider); border-left:2px solid var(--accent-cyan); border-radius:var(--r-xs); background:rgba(255,255,255,0.02);}
+  .lg-fs--stale{border-left-color:var(--accent-amber);}
+  .lg-fs-tag{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); font-weight:700; letter-spacing:0.04em; color:var(--accent-cyan); white-space:nowrap;}
+  .lg-fs--stale .lg-fs-tag{color:var(--accent-amber);}
+  .lg-fs-main{font-family:'IBM Plex Sans', sans-serif; font-size:var(--fs-caption); color:var(--text-primary); min-width:0;}
+  .lg-fs-meta{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); color:var(--text-muted); margin-left:auto;}
 
   /* Import-preview clickable comparison row */
   tr[role="button"] > td{padding-top:13px; padding-bottom:13px;}
@@ -591,16 +600,16 @@
       <div class="help-text" style="margin-top:-8px;">1 unit for each day your first leg departs FROM home base, plus 1 unit for each day your last leg arrives AT home base. A same-day round trip earns 2 (out + back); a multi-day layover pairing also earns 2 total (the outbound day, the return day) — the layover days themselves earn nothing.</div>
       <div class="help-text">These rates are saved on this device and apply to every roster period until you change them here.</div>
 
-      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Flight Tracker <span class="mono hint hint--plain">(for the 🔍 Check Actual button on the Roster tab)</span></h2>
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Flight Status <span class="mono hint hint--plain">(optional — live operational status on the Roster tab)</span></h2>
       <div class="field-group">
-        <label>AviationStack API Key</label>
-        <div class="input-wrap"><input type="text" id="flight-api-key" placeholder="paste your key"></div>
+        <label>CrewBoard Backend URL</label>
+        <div class="input-wrap"><input type="text" id="backend-url" value="" placeholder="http://localhost:8787" inputmode="url" autocapitalize="off" autocorrect="off"></div>
       </div>
       <div class="field-group">
-        <label>Airline IATA Code</label>
-        <div class="input-wrap"><input type="text" id="flight-airline-code" value="6H"></div>
+        <label>Airline code <span class="mono hint">(prefixed to roster flight numbers)</span></label>
+        <div class="input-wrap"><input type="text" id="flight-airline-code" value="6H" maxlength="3" autocapitalize="characters" oninput="this.value=this.value.toUpperCase();"></div>
       </div>
-      <div class="help-text" style="margin-top:0;">Uses AviationStack's free tier. Two real limits worth knowing: it typically only has data for very recent/current flights, not older historical dates — and it's queried over plain HTTP, not HTTPS, so it may fail on stricter networks. Always check the date/route it returns actually matches before trusting the result — it can return a different day's flight under the same number.</div>
+      <div class="help-text" style="margin-top:0;">Points CrewBoard at your own backend service (a Cloudflare Worker) that keeps a small cache of flight status warm. No API key is entered here — the key stays on the backend. Leave the URL empty and CrewBoard works exactly as before, with no network calls. CrewBoard never contacts a flight-data provider directly, and this status is never used for block hours, credit, or pay — it's shown as separate "✈ live" info on each flight.</div>
 
       <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Commute <span class="mono hint hint--plain">(used on the family calendar image)</span></h2>
       <div class="field-group">
@@ -724,7 +733,7 @@
       <div id="parse-status" class="help-text" style="display:none; margin-top:10px;"></div>
       <div id="review-panel" style="display:none; margin-top:14px;"></div>
       <button type="button" class="load-btn v-cyan" id="edit-mode-btn" style="margin-top:8px;" onclick="toggleEditMode()">Enter Edit Mode</button>
-      <button type="button" class="load-btn v-amber" id="check-all-btn" style="margin-top:8px;" onclick="checkAllMissingFlights()">Check All Missing Flights</button>
+      <button type="button" class="load-btn v-amber" id="check-all-btn" style="margin-top:8px;" onclick="refreshAllFlightStatus()">Refresh cached flight status</button>
       <button type="button" class="load-btn v-purple" id="fill-layovers-btn" style="margin-top:8px;" onclick="fillImplicitLayovers()">Fill Implied Layovers</button>
       <div id="layover-review-panel"></div>
       <div class="collapse-section collapsed" data-collapse-id="howpay" style="margin-top:14px;">
@@ -1108,7 +1117,12 @@
     );
   }
   function saveRoster(){
-    try { localStorage.setItem(ROSTER_STORE_KEY, JSON.stringify(rosterData)); } catch(e){}
+    // `flightStatus` is transient display-only enrichment from the backend cache —
+    // never persist it (kept fresh by re-reading /v1/flight on load instead).
+    try { localStorage.setItem(ROSTER_STORE_KEY, JSON.stringify(rosterData, (k, v) => k === 'flightStatus' ? undefined : v)); } catch(e){}
+    // The roster changed — (re)register its flight legs and re-read cached status.
+    // Debounced + no-op when no backend URL is configured.
+    if(typeof scheduleFlightStatusSync === 'function') scheduleFlightStatusSync();
   }
   const SAMPLE_ROSTER = JSON.parse(JSON.stringify(rosterData)); // snapshot before any restore
   function clearSavedRoster(){
@@ -1142,7 +1156,7 @@
   const EXCLUDED = ['EIL']; // TEMPLATE: set to your per-diem-excluded destination code(s)
   const EILAT_CODE = 'EIL'; // TEMPLATE: set to your airline's short-hop/low-minimum destination code, or '' if none
   const HOLIDAY_DATES = []; // TEMPLATE: add this year's holiday dates as 'DD/MM' strings, e.g. ['11/09','13/09']
-  const DUTY_CODE_MAP = {ROFF:'Requested Day Off', CXL:'Canceled flight', OFF:'Day off', OFFP:'Paid day off', SBSM:'Standby — short morning', SBSE:'Standby — short evening', INS:'Instruction (ground)', PM:'Request evening off', MEMO:'Memo'};
+  const DUTY_CODE_MAP = {ROFF:'Requested Day Off', CXL:'Canceled flight', OFF:'Day off', OFFP:'Paid day off', SBSM:'Standby — short morning', SBSE:'Standby — short evening', INS:'Instruction (ground)', RTNH:'Remote training (half day)', PM:'Request evening off', MEMO:'Memo'};
   const MONTHLY_BLOCK_THRESHOLD = 83; // raw block hours per month; each hour above this earns 1.5x (extra +0.5/hr bonus)
   // ── Route block-time table (CrewBoard Integration Step 3A) ──
   // TEMPLATE: privacy-safe — the per-pilot route table lives ONLY in the private
@@ -1320,7 +1334,7 @@
         const idx = dayIndex[d.date];
         const dayShabbat = isShabbatDay(d);
         const estimates = getForecastEstimates();   // roster view shows the forecast, incl. route estimates
-        const resolvedLegs = d.legs.map(l => resolveLegBlock(l, estimates));
+        const resolvedLegs = d.legs.map(l => resolveLegBlock(l, estimates, { flightStatus: l.flightStatus }));
         const knownLegs = resolvedLegs.filter(r => r.block != null);
         const anyEstimated = knownLegs.some(r => r.estimated);
         const dayTotalBlock = knownLegs.reduce((s, r) => s + r.block, 0);
@@ -1347,8 +1361,9 @@
               ? '' : '<span class="mono" style="color:var(--danger)">no time</span>');
           html += `<div class="lg">
             <div class="lg-l1"><span class="lg-route">${l.from || '?'} → ${l.to || '?'}</span><span class="lg-time">${timeHtml}</span></div>
-            <div class="lg-l2"><span class="lg-flt">${l.flt || '?'}${l.ac ? ' [' + l.ac + ']' : ''}</span>${blockTag}${dayShabbat ? '<span class="lg-shb" role="img" aria-label="Shabbat window touched" title="Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time)">SHB</span>' : ''}<button type="button" class="crew-btn lg-action" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times" aria-label="Check actual times for flight ${l.flt || ''}">🔍</button></div>
+            <div class="lg-l2"><span class="lg-flt">${l.flt || '?'}${l.ac ? ' [' + l.ac + ']' : ''}</span>${blockTag}${dayShabbat ? '<span class="lg-shb" role="img" aria-label="Shabbat window touched" title="Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time)">SHB</span>' : ''}<button type="button" class="crew-btn lg-action" id="check-actual-${i}-${j}" onclick="refreshLegFlightStatus(${i},${j})" title="Refresh cached flight status" aria-label="Refresh cached flight status for flight ${l.flt || ''}">🔍</button></div>
             <label class="lg-unsched"><input type="checkbox" class="unsched-check" data-day="${i}" data-leg="${j}" ${l.unschedDefault ? 'checked' : ''} onchange="recalcSalary(); renderReconComparison();"><span>Unscheduled (1.5×)</span></label>
+            ${renderFlightStatusLine(l.flightStatus)}
           </div>`;
         });
         html += `<input type="text" class="trip-note-input" data-date="${d.date}" placeholder="Note for this trip (passport, uniform, etc.)" value="${(getTripNote(d.date) || '').replace(/"/g,'&quot;')}" onchange="saveTripNote('${d.date}', this.value)">`;
@@ -1867,103 +1882,222 @@
   }
   renderSwaps();
 
-  // ---- Check Actual Time (AviationStack, free tier — see Settings for caveats) ----
-  async function fetchActualForLeg(apiKey, airlineCode, d, l){
-    // Returns {ok, block, time, message} — does NOT touch the DOM, so it's usable both for a
-    // single-flight check and for looping over many flights in bulk.
-    const flightIata = airlineCode + l.flt;
-    const [dd, mm] = d.date.split('/');
-    const isoDate = ROSTER_YEAR + '-' + mm + '-' + dd;
-    try{
-      const url = 'http://api.aviationstack.com/v1/flights?access_key=' + encodeURIComponent(apiKey) + '&flight_iata=' + encodeURIComponent(flightIata) + '&flight_date=' + isoDate;
-      const res = await fetch(url);
-      const json = await res.json();
-      if(json.error) return {ok: false, message: 'API error: ' + (json.error.message || json.error.code || 'unknown')};
-      const flights = json.data || [];
-      if(flights.length === 0) return {ok: false, message: 'no data for ' + d.date + ' (free tier may not cover this date)'};
-      const f = flights[0];
-      const depActual = f.departure && (f.departure.actual || f.departure.estimated);
-      const arrActual = f.arrival && (f.arrival.actual || f.arrival.estimated);
-      if(!depActual || !arrActual) return {ok: false, message: 'no actual times reported yet'};
-      const depDate = new Date(depActual);
-      const arrDate = new Date(arrActual);
-      const blockHours = (arrDate - depDate) / 3600000;
-      if(!(blockHours > 0) || blockHours > 20) return {ok: false, message: 'implausible duration returned'};
-      const toUtcHM = dt => String(dt.getUTCHours()).padStart(2, '0') + ':' + String(dt.getUTCMinutes()).padStart(2, '0');
-      const crossesDay = depDate.getUTCDate() !== arrDate.getUTCDate() || depDate.getUTCMonth() !== arrDate.getUTCMonth();
-      return {ok: true, block: blockHours, time: toUtcHM(depDate) + ' – ' + toUtcHM(arrDate) + (crossesDay ? '⁺¹' : '')};
-    } catch(err){
-      return {ok: false, message: 'network/API error'};
-    }
-  }
+  // ============================================================================
+  //  Flight-status enrichment  (CrewBoard Integration Step 3B)
+  // ============================================================================
+  // CrewBoard talks ONLY to its own backend Worker: POST /v1/watch (register a
+  // roster leg) and GET /v1/flight (read the KV-cached normalized status). It
+  // NEVER calls AeroDataBox / RapidAPI directly and holds no API key. GET
+  // /v1/flight never triggers a live provider call — the Worker's hourly Cron
+  // populates KV. Everything here is DISPLAY-ONLY enrichment: it never writes
+  // leg.block, leg.time, or any value used for Block Flown / Activity Days /
+  // Flight Days / incentives. The only forecast use is resolveLegBlock tier 3.
+  const FLIGHT_STATUS_SCHEMA = 'crewboard.flight-status/v1';
+  const FS_REGISTER_MIN_DAYS = -14, FS_REGISTER_MAX_DAYS = 62; // mirrors the Worker's REGISTER_WINDOW
 
-  async function checkActualTime(dayIdx, legIdx){
-    const apiKey = document.getElementById('flight-api-key').value.trim();
-    const airlineCode = document.getElementById('flight-airline-code').value.trim() || '6H';
-    if(!apiKey){ showToast('Add your AviationStack API key in Settings first'); return; }
-    const d = rosterData[dayIdx];
-    const l = d && d.legs && d.legs[legIdx];
-    if(!l){ return; }
-    const btn = document.getElementById('check-actual-' + dayIdx + '-' + legIdx);
-    if(btn){
-      if(btn.dataset.busy) return; // ignore a rapid second tap while this leg is still checking
-      btn.dataset.busy = '1';
-      btn.style.pointerEvents = 'none';
-      btn.textContent = '…';
-    }
-    const result = await fetchActualForLeg(apiKey, airlineCode, d, l);
-    if(!result.ok){
-      showToast((airlineCode + l.flt) + ': ' + result.message);
-      if(btn){ btn.textContent = '🔍'; btn.style.pointerEvents = ''; delete btn.dataset.busy; }
-      return;
-    }
-    l.block = result.block;
-    l.time = result.time;
-    saveRoster();
-    renderRoster();
-    recalcSalary();
-    showToast('Updated ' + airlineCode + l.flt + ' — ' + result.block.toFixed(2) + 'h. Double-check the date/route match before trusting it!');
+  function getBackendBase(){
+    let v = '';
+    try { const el = document.getElementById('backend-url'); v = el ? el.value : ''; } catch(e){}
+    if(!v){ try { v = (JSON.parse(localStorage.getItem('crewboard-fields') || '{}'))['backend-url'] || ''; } catch(e){} }
+    v = String(v || '').trim().replace(/\/+$/, '');
+    return /^https?:\/\/[^\s]+$/i.test(v) ? v : '';
   }
-
-  async function checkAllMissingFlights(){
-    // Bulk version of the 🔍 button — loops only over legs currently missing block hours (not
-    // every flight, and not automatically on page load, since most future flights simply have
-    // no actual data yet and re-checking them every time the app opens would just burn through
-    // the free tier's monthly quota for nothing). Small delay between calls to be a reasonable
-    // API citizen, not to dodge any specific rate limit we know of.
-    const apiKey = document.getElementById('flight-api-key').value.trim();
-    const airlineCode = document.getElementById('flight-airline-code').value.trim() || '6H';
-    if(!apiKey){ showToast('Add your AviationStack API key in Settings first'); return; }
-    const targets = [];
+  function flightAirlineCode(){
+    let v = '';
+    try { const el = document.getElementById('flight-airline-code'); v = el ? el.value : ''; } catch(e){}
+    if(!v){ try { v = (JSON.parse(localStorage.getItem('crewboard-fields') || '{}'))['flight-airline-code'] || ''; } catch(e){} }
+    v = String(v || '6H').trim().toUpperCase().replace(/[^A-Z0-9]/g, '');
+    return v || '6H';
+  }
+  function fsDaysFromToday(isoDate){
+    const t = Date.parse(isoDate + 'T00:00:00Z');
+    if(isNaN(t)) return NaN;
+    const n = new Date();
+    return Math.round((t - Date.UTC(n.getUTCFullYear(), n.getUTCMonth(), n.getUTCDate())) / 86400000);
+  }
+  // Full flight identity for one roster leg, or null if it can't / shouldn't be watched.
+  // Excludes non-DUTY days, malformed legs, and dates outside the registration horizon.
+  function legFlightIdentity(d, l){
+    if(!d || d.code !== 'DUTY' || !l) return null;
+    const fltDigits = String(l.flt || '').replace(/\D/g, '');
+    if(!fltDigits || fltDigits.length > 4) return null;
+    const from = String(l.from || '').trim().toUpperCase();
+    const to = String(l.to || '').trim().toUpperCase();
+    if(!/^[A-Z]{3}$/.test(from) || !/^[A-Z]{3}$/.test(to) || from === to) return null;
+    const [dd, mm] = String(d.date || '').split('/');
+    if(!dd || !mm) return null;
+    const date = ROSTER_YEAR + '-' + String(mm).padStart(2, '0') + '-' + String(dd).padStart(2, '0');
+    const off = fsDaysFromToday(date);
+    if(isNaN(off) || off < FS_REGISTER_MIN_DAYS || off > FS_REGISTER_MAX_DAYS) return null;
+    const num = (flightAirlineCode() + fltDigits).toUpperCase();
+    if(!/^[A-Z0-9]{2,3}[0-9]{1,4}$/.test(num)) return null;
+    return { num, date, from, to, _key: num + '|' + date + '|' + from + '-' + to };
+  }
+  // Best-effort scheduled dep/arr (ISO-UTC) from the leg's own UTC time string, so
+  // the Worker can skip its bootstrap discovery poll. Absent -> Worker anchors on
+  // the flight day. Never affects block/credit.
+  function legScheduledUtc(l, id){
+    const m = String(l && l.time || '').match(/(\d{1,2}):(\d{2})\s*[–-]\s*(\d{1,2}):(\d{2})(⁺[¹²]|\+[12])?/);
+    if(!m) return {};
+    const depMin = (+m[1]) * 60 + (+m[2]), arrMin = (+m[3]) * 60 + (+m[4]);
+    let arrMs = Date.parse(id.date + 'T00:00:00Z');
+    if(m[5] || arrMin < depMin) arrMs += 86400000;
+    return {
+      scheduledDeparture: id.date + 'T' + m[1].padStart(2, '0') + ':' + m[2] + ':00Z',
+      scheduledArrival: new Date(arrMs).toISOString().slice(0, 10) + 'T' + m[3].padStart(2, '0') + ':' + m[4] + ':00Z'
+    };
+  }
+  function eligibleFlightLegs(){
+    const out = [];
     rosterData.forEach((d, i) => {
-      if(d.code !== 'DUTY' || !d.legs) return;
-      d.legs.forEach((l, j) => { if(l.block == null) targets.push({dayIdx: i, legIdx: j}); });
+      if(d.code !== 'DUTY' || !Array.isArray(d.legs)) return;
+      d.legs.forEach((l, j) => { const id = legFlightIdentity(d, l); if(id) out.push({ i, j, d, l, id }); });
     });
-    if(targets.length === 0){ showToast('Nothing missing — every flight already has block hours'); return; }
-    const btn = document.getElementById('check-all-btn');
-    if(btn && btn.disabled) return; // already running — ignore repeat taps
-    if(btn){ btn.disabled = true; btn.setAttribute('aria-busy', 'true'); }
-    showToast('Checking ' + targets.length + ' flight(s) against AviationStack…');
-    let updated = 0, failed = 0;
-    try{
-      for(let k = 0; k < targets.length; k++){
-        const {dayIdx, legIdx} = targets[k];
-        const d = rosterData[dayIdx];
-        const l = d && d.legs && d.legs[legIdx];
-        if(!l || l.block != null) continue; // may have been filled by a previous iteration if the same flight number appears twice
-        if(btn) btn.textContent = 'Checking ' + (k + 1) + '/' + targets.length + '…';
-        const result = await fetchActualForLeg(apiKey, airlineCode, d, l);
-        if(result.ok){ l.block = result.block; l.time = result.time; updated++; }
-        else failed++;
-        if(k < targets.length - 1) await new Promise(r => setTimeout(r, 300));
-      }
-    } finally {
-      if(updated > 0) saveRoster();
-      renderRoster();
-      recalcSalary();
-      if(btn){ btn.textContent = 'Check All Missing Flights'; btn.disabled = false; btn.removeAttribute('aria-busy'); }
+    return out;
+  }
+
+  const _fsRegistered = new Set(); // watch identities POSTed this session
+  let _fsSyncTimer = null, _fsInFlight = false;
+
+  async function fsRegisterLegs(legs, force){
+    const base = getBackendBase();
+    if(!base) return;
+    for(const { l, id } of legs){
+      if(!force && _fsRegistered.has(id._key)) continue;
+      try {
+        const res = await fetch(base + '/v1/watch', {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ num: id.num, date: id.date, from: id.from, to: id.to, ...legScheduledUtc(l, id) })
+        });
+        if(res.ok) _fsRegistered.add(id._key);
+      } catch(e){ /* registration failure must never break roster loading */ }
     }
-    showToast('Updated ' + updated + ' of ' + targets.length + ' — ' + failed + ' had no data yet (probably still in the future)');
+  }
+  function normalizeFsResponse(body){
+    if(!body || typeof body !== 'object') return null;
+    if(body.schema && body.schema !== FLIGHT_STATUS_SCHEMA) return null;
+    let cache = 'MISS';
+    if(body.found === true) cache = body.expired ? 'STALE' : 'HIT';
+    else if(body.reason && body.reason !== 'not_cached') cache = 'PROVIDER';
+    return {
+      found: body.found === true, cache, reason: body.reason || null,
+      status: body.status || null, statusText: body.statusText || null, isFinal: body.isFinal === true,
+      stale: body.stale === true, staleReason: body.staleReason || null,
+      checkedAt: body.checkedAt || null, providerUpdatedAt: body.providerUpdatedAt || null,
+      dataAgeMinutes: (typeof body.dataAgeMinutes === 'number') ? body.dataAgeMinutes : null,
+      expiresAt: body.expiresAt || null,
+      departure: body.departure || null, arrival: body.arrival || null,
+      scheduledBlockMinutes: (typeof body.scheduledBlockMinutes === 'number') ? body.scheduledBlockMinutes : null,
+      scheduledBlockBasis: body.scheduledBlockBasis || null,
+      aircraft: body.aircraft || null, matchConfidence: body.matchConfidence || null,
+      _readAt: new Date().toISOString()
+    };
+  }
+  async function fsReadOne(id){
+    const base = getBackendBase();
+    if(!base) return null;
+    const qs = 'num=' + encodeURIComponent(id.num) + '&date=' + id.date + '&from=' + id.from + '&to=' + id.to;
+    const res = await fetch(base + '/v1/flight?' + qs);
+    let body = null;
+    try { body = await res.json(); } catch(e){ return null; }
+    const norm = normalizeFsResponse(body);
+    if(norm){ try { const h = res.headers.get('X-Cache'); if(h) norm.cache = h; } catch(e){} }
+    return norm;
+  }
+  async function fsReadLegs(legs){
+    if(!getBackendBase()) return;
+    for(const { l, id } of legs){
+      try { const norm = await fsReadOne(id); if(norm) l.flightStatus = norm; }
+      catch(e){ /* keep any previous enrichment; never surface as an error */ }
+    }
+  }
+  // Register + read, guarded. Zero network when no backend URL is configured.
+  async function syncFlightStatus(opts){
+    opts = opts || {};
+    if(!getBackendBase() || _fsInFlight) return;
+    const legs = eligibleFlightLegs();
+    if(legs.length === 0) return;
+    _fsInFlight = true;
+    try {
+      await fsRegisterLegs(legs, opts.force === true);
+      await fsReadLegs(legs);
+      if(typeof renderRoster === 'function'){ renderRoster(); recalcSalary(); }
+    } finally { _fsInFlight = false; }
+  }
+  function scheduleFlightStatusSync(opts){
+    if(!getBackendBase()) return;
+    if(_fsSyncTimer) clearTimeout(_fsSyncTimer);
+    _fsSyncTimer = setTimeout(() => { _fsSyncTimer = null; syncFlightStatus(opts); }, 900);
+  }
+  // Per-leg 🔍 — re-read this one leg's cached status (re-registers it first).
+  async function refreshLegFlightStatus(dayIdx, legIdx){
+    if(!getBackendBase()){ showToast('Set your CrewBoard Backend URL in Settings first'); return; }
+    const d = rosterData[dayIdx], l = d && d.legs && d.legs[legIdx];
+    const id = l && legFlightIdentity(d, l);
+    if(!id){ showToast('This leg has no usable flight identity to check'); return; }
+    const btn = document.getElementById('check-actual-' + dayIdx + '-' + legIdx);
+    if(btn){ if(btn.dataset.busy) return; btn.dataset.busy = '1'; btn.textContent = '…'; }
+    try {
+      await fsRegisterLegs([{ l, id }], true);
+      const norm = await fsReadOne(id);
+      if(norm) l.flightStatus = norm;
+      renderRoster(); recalcSalary();
+      if(!norm || (!norm.found && norm.cache === 'MISS')) showToast('Not in the cache yet — the backend refreshes hourly, check back later');
+      else if(norm.found) showToast(id.num + ': ' + (norm.statusText || norm.status || 'status updated'));
+      else showToast(id.num + ': ' + (norm.reason || 'no match in cache yet'));
+    } catch(e){ showToast('Could not reach the backend'); }
+    finally { if(btn){ btn.textContent = '🔍'; delete btn.dataset.busy; } }
+  }
+  // Manage-sheet button — re-read the whole roster's cached status (no upstream call).
+  async function refreshAllFlightStatus(){
+    if(!getBackendBase()){ showToast('Set your CrewBoard Backend URL in Settings first'); return; }
+    const btn = document.getElementById('check-all-btn');
+    if(btn && btn.disabled) return;
+    if(btn){ btn.disabled = true; btn.setAttribute('aria-busy', 'true'); btn.textContent = 'Refreshing…'; }
+    try {
+      await syncFlightStatus({ force: true });
+      const legs = eligibleFlightLegs();
+      const withStatus = legs.filter(x => x.l.flightStatus && x.l.flightStatus.found).length;
+      showToast('Checked ' + legs.length + ' watched flight(s) · ' + withStatus + ' have cached status');
+    } catch(e){ showToast('Could not reach the backend'); }
+    finally { if(btn){ btn.disabled = false; btn.removeAttribute('aria-busy'); btn.textContent = 'Refresh cached flight status'; } }
+  }
+
+  // ---- Flight-status leg rendering (display-only) ----
+  function fsHM(iso){
+    const t = iso ? Date.parse(iso) : NaN;
+    if(isNaN(t)) return null;
+    const dt = new Date(t);
+    return String(dt.getUTCHours()).padStart(2, '0') + ':' + String(dt.getUTCMinutes()).padStart(2, '0') + 'z';
+  }
+  function fsAgo(iso){
+    const t = iso ? Date.parse(iso) : NaN;
+    if(isNaN(t)) return '';
+    const mins = Math.round((Date.now() - t) / 60000);
+    if(mins < 2) return 'just now';
+    if(mins < 90) return mins + 'm ago';
+    const h = Math.round(mins / 60);
+    return h < 36 ? h + 'h ago' : Math.round(h / 24) + 'd ago';
+  }
+  function renderFlightStatusLine(fs){
+    if(!fs || !fs.found) return '';
+    const dep = fs.departure || {}, arr = fs.arrival || {};
+    const bits = [];
+    if(arr.actual) bits.push('landed ' + fsHM(arr.actual));
+    else if(dep.actual) bits.push('off ' + fsHM(dep.actual));
+    if(!arr.actual && arr.estimated) bits.push('ETA ' + fsHM(arr.estimated));
+    else if(!dep.actual && dep.estimated) bits.push('ETD ' + fsHM(dep.estimated));
+    if(!arr.actual && dep.delayMinutes != null && dep.delayMinutes >= 5) bits.push('dep +' + dep.delayMinutes + 'm');
+    else if(arr.actual && arr.delayMinutes != null && arr.delayMinutes >= 5) bits.push('arr +' + arr.delayMinutes + 'm');
+    const main = (fs.statusText || fs.status || 'status') + (bits.length ? ' · ' + bits.join(' · ') : '');
+    const meta = ['cache ' + (fs.cache || '?')];
+    if(fs.checkedAt) meta.push('checked ' + fsAgo(fs.checkedAt));
+    if(fs.stale) meta.push('stale');
+    return `<div class="lg-fs${fs.stale ? ' lg-fs--stale' : ''}">
+      <span class="lg-fs-tag" title="Live flight status from the CrewBoard backend cache — not roster data, not used for pay">✈ live</span>
+      <span class="lg-fs-main">${main}</span>
+      <span class="lg-fs-meta">${meta.join(' · ')}</span>
+    </div>`;
   }
 
   function toggleEditMode(){
@@ -2371,17 +2505,19 @@
     const dateBlockRe = /(\d{2}\/\d{2}\/\d{4})\s+(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\s+([\s\S]*?)(?=\d{2}\/\d{2}\/\d{4}\s+(?:Sun|Mon|Tue|Wed|Thu|Fri|Sat)|Expiry Dates|Memos|$)/g;
     const days = [];
     let m;
+    const conversionFailures = [];
     while((m = dateBlockRe.exec(text)) !== null){
       const dateStr = m[1], dow = m[2], block = m[3];
       const parts = dateStr.split('/');
       const shortDate = parts[0] + '/' + parts[1];
+      const rowDateISO = parts[2] + '-' + parts[1] + '-' + parts[0];
       let code = null;
       for(const c of Object.keys(dutyCodeMap)){
         if(new RegExp('\\b' + c + '\\b').test(block)){ code = c; break; }
       }
       const flightMatches = [...block.matchAll(/(\d{2,4})\s*\[(\d{3})\]/g)];
       const routeMatches = [...block.matchAll(/([A-Z]{3})\s*-\s*([A-Z]{3})/g)];
-      const timeMatches = [...block.matchAll(/A?(\d{2}:\d{2})(⁺¹|\+1)?/g)];
+      const timeMatches = [...block.matchAll(/A?(\d{2}:\d{2})(⁺[¹²]|\+[12])?/g)];
 
       if(flightMatches.length > 0 && routeMatches.length >= flightMatches.length){
         const legs = flightMatches.map((fm, idx) => {
@@ -2397,14 +2533,17 @@
           legs.forEach((leg, idx) => {
             const dep = middle[idx * 2], arr = middle[idx * 2 + 1];
             if(dep && arr){
-              leg.time = dep[1] + ' – ' + arr[1] + (arr[2] ? '⁺¹' : '');
+              const depPlus = plusDaysFromMarker(dep[2]);
+              const arrPlus = plusDaysFromMarker(arr[2]);
+              leg.time = dep[1] + ' – ' + arr[1] + (arrPlus > 0 ? '⁺¹' : '');
               if(isUTC){
-                leg.block = computeUtcBlock(dep[1], arr[1], !!arr[2]);
+                leg.block = computeUtcBlock(dep[1], arr[1], arrPlus > 0);
               } else {
-                // Local Station times — convert via configured airport offsets.
-                // Unknown offset -> block stays null (never invented).
-                const converted = localLegToUtc(dep[1], leg.from, arr[1], leg.to, !!arr[2]);
-                if(converted){ leg.block = converted.block; leg.time = converted.time; }
+                // Local Station: convert both ends to real UTC via each airport's IANA
+                // timezone for this date (DST-correct). Unknown zone -> block stays null.
+                const converted = convertLocalStationLeg(rowDateISO, leg.from, leg.to, dep[1], arr[1], depPlus, arrPlus);
+                if(converted.block != null){ leg.block = converted.block; leg.time = converted.time; }
+                else conversionFailures.push({leg: shortDate + ' ' + leg.from + '-' + leg.to + ' ' + dep[1] + '–' + arr[1], reason: converted.reason});
               }
             }
           });
@@ -2414,7 +2553,7 @@
         days.push({date: shortDate, day: dow.toUpperCase(), code, label: dutyCodeMap[code]});
       }
     }
-    return {days, isUTC};
+    return {days, isUTC, conversionFailures};
   }
 
   function computeUtcBlock(dep, arr, plusOne){
@@ -2424,6 +2563,115 @@
     let arrMin = ah * 60 + am + (plusOne ? 1440 : 0);
     if(!plusOne && arrMin < depMin) arrMin += 1440;
     return (arrMin - depMin) / 60;
+  }
+
+  // ── Airport timezones (IATA → IANA), for "Local Station" roster imports ──────
+  // Public reference data — not personal. A local-station export prints each leg's
+  // times on the local wall clock of its own airport; to get real block time we
+  // must convert both ends to UTC using the zone's actual rules for that date
+  // (so daylight-saving is handled — a fixed hour offset is not). An airport not
+  // listed here falls back to the manual "Airport UTC Offsets" Settings list, and
+  // if that is also missing the leg's block stays null (never guessed).
+  const AIRPORT_TZ = {
+    // Israel
+    TLV:'Asia/Jerusalem', ETM:'Asia/Jerusalem', ETH:'Asia/Jerusalem', VDA:'Asia/Jerusalem', SDV:'Asia/Jerusalem',
+    // Greece / Cyprus
+    ATH:'Europe/Athens', RHO:'Europe/Athens', HER:'Europe/Athens', JTR:'Europe/Athens', SKG:'Europe/Athens',
+    CFU:'Europe/Athens', PVK:'Europe/Athens', KGS:'Europe/Athens', JMK:'Europe/Athens', CHQ:'Europe/Athens',
+    KLX:'Europe/Athens', ZTH:'Europe/Athens', EFL:'Europe/Athens',
+    LCA:'Asia/Nicosia', PFO:'Asia/Nicosia',
+    // Balkans / Central & Eastern Europe
+    VAR:'Europe/Sofia', BOJ:'Europe/Sofia', SOF:'Europe/Sofia',
+    BUD:'Europe/Budapest', OTP:'Europe/Bucharest', KIV:'Europe/Chisinau',
+    PRG:'Europe/Prague', VNO:'Europe/Vilnius', RIX:'Europe/Riga', TLL:'Europe/Tallinn', WAW:'Europe/Warsaw',
+    LJU:'Europe/Ljubljana', ZAG:'Europe/Zagreb', SPU:'Europe/Zagreb', DBV:'Europe/Zagreb',
+    SJJ:'Europe/Sarajevo', TIV:'Europe/Podgorica', TGD:'Europe/Podgorica', BEG:'Europe/Belgrade',
+    SKP:'Europe/Skopje', TIA:'Europe/Tirane', OHD:'Europe/Skopje',
+    // Western Europe
+    BER:'Europe/Berlin', MUC:'Europe/Berlin', FRA:'Europe/Berlin', DUS:'Europe/Berlin', HAM:'Europe/Berlin',
+    VIE:'Europe/Vienna', SZG:'Europe/Vienna', INN:'Europe/Vienna',
+    ZRH:'Europe/Zurich', GVA:'Europe/Zurich', BSL:'Europe/Zurich',
+    FCO:'Europe/Rome', CIA:'Europe/Rome', NAP:'Europe/Rome', VRN:'Europe/Rome', VCE:'Europe/Rome',
+    CTA:'Europe/Rome', MXP:'Europe/Rome', BLQ:'Europe/Rome', BRI:'Europe/Rome', PMO:'Europe/Rome',
+    AGP:'Europe/Madrid', BCN:'Europe/Madrid', MAD:'Europe/Madrid', ALC:'Europe/Madrid', PMI:'Europe/Madrid',
+    CDG:'Europe/Paris', ORY:'Europe/Paris', NCE:'Europe/Paris', LYS:'Europe/Paris', MRS:'Europe/Paris',
+    AMS:'Europe/Amsterdam', BRU:'Europe/Brussels', LUX:'Europe/Luxembourg',
+    LHR:'Europe/London', LGW:'Europe/London', STN:'Europe/London', LTN:'Europe/London', MAN:'Europe/London',
+    LIS:'Europe/Lisbon', OPO:'Europe/Lisbon',
+    // Turkey / Caucasus / Middle East
+    IST:'Europe/Istanbul', SAW:'Europe/Istanbul', AYT:'Europe/Istanbul', ESB:'Europe/Istanbul', ADB:'Europe/Istanbul',
+    GYD:'Asia/Baku', TBS:'Asia/Tbilisi', BUS:'Asia/Tbilisi', EVN:'Asia/Yerevan',
+    AMM:'Asia/Amman', DXB:'Asia/Dubai', AUH:'Asia/Dubai', RAK:'Africa/Casablanca',
+    // Africa
+    ZNZ:'Africa/Dar_es_Salaam', JRO:'Africa/Dar_es_Salaam', CAI:'Africa/Cairo', SSH:'Africa/Cairo',
+    HRG:'Africa/Cairo', ADD:'Africa/Addis_Ababa', NBO:'Africa/Nairobi',
+    // North America
+    JFK:'America/New_York', EWR:'America/New_York', BOS:'America/New_York', IAD:'America/New_York',
+    MIA:'America/New_York', FLL:'America/New_York', ORD:'America/Chicago', LAX:'America/Los_Angeles',
+    YYZ:'America/Toronto', YUL:'America/Toronto'
+  };
+
+  // Real UTC offset (minutes, east-of-UTC positive) of an IANA zone at a UTC instant.
+  function tzOffsetMinutes(utcMs, timeZone){
+    try {
+      const dtf = new Intl.DateTimeFormat('en-US', {
+        timeZone, hourCycle: 'h23',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      const p = {};
+      for(const part of dtf.formatToParts(new Date(utcMs))){ p[part.type] = part.value; }
+      const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, (+p.hour) % 24, +p.minute, +p.second);
+      return Math.round((asUTC - utcMs) / 60000);
+    } catch(e){ return null; } // unknown/invalid zone
+  }
+
+  // A wall-clock date+time in a given IANA zone → real UTC epoch ms.
+  // Refines the offset at the candidate instant so a DST changeover is resolved correctly.
+  function zonedWallTimeToUtcMs(y, mo, d, hh, mm, timeZone){
+    const naiveUtc = Date.UTC(y, mo - 1, d, hh, mm, 0);
+    const off1 = tzOffsetMinutes(naiveUtc, timeZone);
+    if(off1 == null) return null;
+    let utc = naiveUtc - off1 * 60000;
+    const off2 = tzOffsetMinutes(utc, timeZone);
+    if(off2 != null && off2 !== off1) utc = naiveUtc - off2 * 60000;
+    return utc;
+  }
+
+  // Convert one Local-Station leg to real UTC block time.
+  //   baseDateISO  'YYYY-MM-DD' — the roster row's own calendar date
+  //   depPlusDays / arrPlusDays — extra calendar days from a ⁺¹ / ⁺² marker on each timestamp
+  // Prefers the IANA zone (DST-correct); falls back to a fixed manual offset only when a
+  // zone is unknown. Returns {block, time} on success, or {block:null, reason} — never a guess.
+  function convertLocalStationLeg(baseDateISO, fromIata, toIata, depHM, arrHM, depPlusDays, arrPlusDays){
+    const fromTz = AIRPORT_TZ[fromIata];
+    const toTz = AIRPORT_TZ[toIata];
+    const fixed = getAirportOffsets(); // built-in + user "Airport UTC Offsets" — fallback only
+    const fromFix = fixed[fromIata], toFix = fixed[toIata];
+    if(!fromTz && fromFix == null) return {block: null, reason: (fromIata || '?') + ': no timezone known (departure airport)'};
+    if(!toTz && toFix == null) return {block: null, reason: (toIata || '?') + ': no timezone known (arrival airport)'};
+    const dm = /^(\d{1,2}):(\d{2})$/.exec(String(depHM || '').trim());
+    const am = /^(\d{1,2}):(\d{2})$/.exec(String(arrHM || '').trim());
+    if(!dm || !am) return {block: null, reason: 'departure/arrival time missing or unreadable'};
+    const [Y, M, D] = baseDateISO.split('-').map(Number);
+    if([Y, M, D].some(isNaN)) return {block: null, reason: 'row date unreadable'};
+    const depCal = new Date(Date.UTC(Y, M - 1, D + (depPlusDays || 0)));
+    const arrCal = new Date(Date.UTC(Y, M - 1, D + (arrPlusDays || 0)));
+    const depUtcMs = fromTz
+      ? zonedWallTimeToUtcMs(depCal.getUTCFullYear(), depCal.getUTCMonth() + 1, depCal.getUTCDate(), +dm[1], +dm[2], fromTz)
+      : Date.UTC(depCal.getUTCFullYear(), depCal.getUTCMonth(), depCal.getUTCDate(), +dm[1], +dm[2]) - fromFix * 3600000;
+    let arrUtcMs = toTz
+      ? zonedWallTimeToUtcMs(arrCal.getUTCFullYear(), arrCal.getUTCMonth() + 1, arrCal.getUTCDate(), +am[1], +am[2], toTz)
+      : Date.UTC(arrCal.getUTCFullYear(), arrCal.getUTCMonth(), arrCal.getUTCDate(), +am[1], +am[2]) - toFix * 3600000;
+    if(depUtcMs == null || arrUtcMs == null) return {block: null, reason: 'timezone lookup failed'};
+    // Safety net: no ⁺¹ marker but the leg still lands "before" it left in UTC → it crossed
+    // midnight; add exactly one day (never more). A marker, when present, is trusted as-is.
+    if(arrUtcMs <= depUtcMs && !arrPlusDays) arrUtcMs += 86400000;
+    const block = (arrUtcMs - depUtcMs) / 3600000;
+    if(!(block > 0) || block > 20) return {block: null, reason: 'converted duration ' + block.toFixed(2) + 'h is implausible — not used'};
+    const hhmm = ms => { const t = new Date(ms); return String(t.getUTCHours()).padStart(2, '0') + ':' + String(t.getUTCMinutes()).padStart(2, '0'); };
+    const crossesDay = new Date(depUtcMs).getUTCDate() !== new Date(arrUtcMs).getUTCDate();
+    return {block: Math.round(block * 60) / 60, time: hhmm(depUtcMs) + ' – ' + hhmm(arrUtcMs) + (crossesDay ? '⁺¹' : '')};
   }
 
   function localLegToUtc(depLocalHM, depAirport, arrLocalHM, arrAirport, arrMarkedPlusOne){
@@ -2480,15 +2728,15 @@
       const parsed = parseSpreadsheetRoster(rows, isUTC);
       if(parsed.days.length === 0){
         status.style.color = 'var(--danger)';
-        status.textContent = "Couldn't find a recognizable schedule table in this file — this CSV/XLSX parser is new and untested against a real export. Send the file to me in chat and I'll fix the parser.";
+        status.textContent = "Couldn't find a recognizable schedule table in this file.";
         return;
       }
       status.style.display = 'none';
-      showReview({days: parsed.days, isUTC});
+      showReview({days: parsed.days, isUTC, conversionFailures: parsed.conversionFailures});
       showToast('Parsed ' + parsed.days.length + ' day(s) — review below');
     } catch(err){
       status.style.color = 'var(--danger)';
-      status.textContent = "Couldn't read this file (" + err.message + "). Send it to me in chat instead.";
+      status.textContent = "Couldn't read this file (" + err.message + ").";
     } finally {
       setRosterLoadBusy(false);
     }
@@ -2529,6 +2777,7 @@
     if(headerIdx === -1 || cols.date === undefined || cols.duties === undefined) return {days: []};
 
     const days = [];
+    const conversionFailures = []; // {leg, reason} — local-station legs that stayed block:null
     for(let i = headerIdx + 1; i < rows.length; i++){
       const row = rows[i];
       if(!row || row.every(c => String(c || '').trim() === '')) continue;
@@ -2536,6 +2785,7 @@
       const dateMatch = dateCell.match(/(\d{1,2})\/(\d{1,2})\/(\d{4})/);
       if(!dateMatch) continue; // header/footer/subtotal row, not a data row
       const shortDate = dateMatch[1].padStart(2, '0') + '/' + dateMatch[2].padStart(2, '0');
+      const rowDateISO = dateMatch[3] + '-' + dateMatch[2].padStart(2, '0') + '-' + dateMatch[1].padStart(2, '0');
       const dowMatch = dateCell.match(/\b(Sun|Mon|Tue|Wed|Thu|Fri|Sat)\b/i);
       let dow = dowMatch ? dowMatch[1].toUpperCase() : null;
       if(!dow){
@@ -2575,19 +2825,21 @@
         const from = routeMatch ? routeMatch[1] : '???';
         const to = routeMatch ? routeMatch[2] : '???';
         let block = null, timeStr = null;
-        const actualMatch = (actualLines[idx] || '').match(/A?(\d{2}:\d{2})(⁺¹|\+1)?\s*-\s*A?(\d{2}:\d{2})(⁺¹|\+1)?/);
+        const actualMatch = (actualLines[idx] || '').match(/A?(\d{1,2}:\d{2})(⁺[¹²]|\+[12])?\s*-\s*A?(\d{1,2}:\d{2})(⁺[¹²]|\+[12])?/);
         if(actualMatch){
           const dep = actualMatch[1], arr = actualMatch[3];
-          const plusOne = !!actualMatch[4];
+          const depPlus = plusDaysFromMarker(actualMatch[2]);
+          const arrPlus = plusDaysFromMarker(actualMatch[4]);
           if(isUTC){
-            block = computeUtcBlock(dep, arr, plusOne);
-            timeStr = dep + ' – ' + arr + (plusOne ? '⁺¹' : '');
+            block = computeUtcBlock(dep, arr, arrPlus > 0);
+            timeStr = dep + ' – ' + arr + (arrPlus > 0 ? '⁺¹' : '');
           } else {
             // Local Station: dep is FROM's local time, arr is TO's local time — different
-            // clocks. Convert each via AIRPORT_UTC_OFFSET; null (unknown airport) leaves this
-            // leg's block hours blank rather than computing a wrong number.
-            const converted = localLegToUtc(dep, from, arr, to, plusOne);
-            if(converted){ block = converted.block; timeStr = converted.time; }
+            // clocks in different zones. Convert both ends to real UTC using each airport's
+            // IANA timezone for this date (DST-correct); unknown zone -> block stays null.
+            const converted = convertLocalStationLeg(rowDateISO, from, to, dep, arr, depPlus, arrPlus);
+            if(converted.block != null){ block = converted.block; timeStr = converted.time; }
+            else conversionFailures.push({leg: shortDate + ' ' + from + '-' + to + ' ' + dep + '–' + arr, reason: converted.reason});
           }
         }
         return {flt: fltMatch ? fltMatch[1] : '?', ac: '', from, to, time: timeStr, block};
@@ -2597,16 +2849,29 @@
       if(crew.length) dayObj.crew = crew;
       days.push(dayObj);
     }
-    return {days};
+    return {days, conversionFailures};
+  }
+
+  // "⁺¹"/"+1" -> 1, "⁺²"/"+2" -> 2, anything else/empty -> 0 calendar days.
+  function plusDaysFromMarker(mk){
+    if(!mk) return 0;
+    return /[²2]/.test(mk) ? 2 : 1;
   }
 
   function showReview(parsed){
     pendingParsedDays = parsed.days;
     const el = document.getElementById('review-panel');
     const totalCrew = parsed.days.reduce((n, d) => n + (d.crew ? d.crew.length : 0), 0);
-    const missingBlockLegs = parsed.days.filter(d => d.code === 'DUTY').reduce((n, d) => n + d.legs.filter(l => l.block == null).length, 0);
-    const localNote = 'local-station times — block hours converted via each airport\'s UTC offset' + (missingBlockLegs ? ` (${missingBlockLegs} leg(s) skipped: unknown airport — add it to AIRPORT_UTC_OFFSET, or enter those block hours by hand below)` : '') + '.';
+    const failures = parsed.conversionFailures || [];
+    const totalLegs = parsed.days.filter(d => d.code === 'DUTY').reduce((n, d) => n + d.legs.length, 0);
+    const convertedLegs = parsed.days.filter(d => d.code === 'DUTY').reduce((n, d) => n + d.legs.filter(l => l.block != null).length, 0);
+    const localNote = `local-station times — converted to UTC block hours via each airport's timezone (DST-aware). ${convertedLegs} of ${totalLegs} flight leg(s) converted`;
     let html = `<div class="help-text" style="margin-top:0;">Parsed ${parsed.days.length} days (${parsed.isUTC ? 'UTC times — block hours computed automatically' : localNote})${totalCrew ? ' · crew found for ' + parsed.days.filter(d => d.crew && d.crew.length).length + ' flight(s)' : ''}. Review, then apply.</div>`;
+    if(failures.length){
+      html += `<div class="help-text" style="margin-top:0; color:var(--accent-amber);">${failures.length} leg(s) could not be converted and will import with no block hours:<br>` +
+        failures.map(f => `· ${f.leg} — ${f.reason}`).join('<br>') +
+        `<br>You can type those block hours in by hand after applying, or add the airport to “Airport UTC Offsets” in Settings.</div>`;
+    }
     parsed.days.forEach(d => {
       if(d.code === 'DUTY'){
         html += `<div class="stub"><div class="stub-head"><span>${d.day} ${d.date}</span><span>Report ${d.report || '?'} · Debrief ${d.debrief || '?'}${d.flatCredit ? ' <span class="badge">4-leg, flat 8h</span>' : ''}${d.crew && d.crew.length ? ' <span class="badge" style="border-color:var(--accent-cyan);color:var(--accent-cyan)">' + d.crew.length + ' crew</span>' : ''}</span></div>`;
@@ -2705,12 +2970,17 @@
                blockNote: 'route block-time table (' + key + ')',
                block: estH, estimated: true };
     }
-    const sbm = (ctx && ctx.flightStatus) ? ctx.flightStatus.scheduledBlockMinutes : null;
+    // Tier 3: cached AeroDataBox scheduled gate-to-gate span, via the backend Worker.
+    // FORECAST ONLY — the caller opts in by passing ctx.flightStatus. It is marked
+    // estimated, ranks below the roster and the manual route table, and NEVER counts
+    // toward realBlockHours / Block Flown.
+    const fs = ctx && ctx.flightStatus;
+    const sbm = (fs && fs.found !== false) ? fs.scheduledBlockMinutes : null;
     if(sbm != null && sbm >= 20 && sbm <= 1200){
       return { blockMinutes: sbm, blockHours: sbm / 60,
                blockSource: 'aerodatabox_schedule', blockEstimated: true,
-               blockAsOf: (ctx.flightStatus.checkedAt || null),
-               blockNote: 'AeroDataBox scheduled times',
+               blockAsOf: (fs.checkedAt || null),
+               blockNote: 'AeroDataBox scheduled times (backend cache)',
                block: sbm / 60, estimated: true };
     }
     return { blockMinutes: null, blockHours: null,
@@ -2730,6 +3000,10 @@
     // table folded in. The Actual reconciliation caller does NOT, so its block
     // hours stay based only on real roster/actual data — exactly as before.
     const estimates = opts.forecast === true ? getForecastEstimates() : getRouteEstimates();
+    // Tier-3 (cached AeroDataBox scheduled block) applies to the FORECAST only — the
+    // Actual reconciliation must stay based on real roster/actual data. Pass the
+    // per-leg cached status through just for forecast callers.
+    const rlb = l => resolveLegBlock(l, estimates, opts.forecast === true ? { flightStatus: l.flightStatus } : null);
     const dayIndex = computeActivityDayIndices(days);
     const sameDayRank = computeSameDayDutyRank(days);
     let block = 0, baseBlock = 0, completion = 0, missingCount = 0, estimatedCount = 0, estimatedBlockHours = 0, realBlockHours = 0, rawBlockHours = 0, tripTimeTotal = 0;
@@ -2744,14 +3018,14 @@
       if(d.flatCredit){
         block += d.flatCredit * veteranMult;
         baseBlock += d.flatCredit;
-        if(d.legs) d.legs.forEach(l => { const resolved = resolveLegBlock(l, estimates); if(resolved.block != null){ rawBlockHours += resolved.block; if(resolved.blockSource === 'roster') realBlockHours += resolved.block; else if(resolved.estimated) estimatedBlockHours += resolved.block; } });
+        if(d.legs) d.legs.forEach(l => { const resolved = rlb(l); if(resolved.block != null){ rawBlockHours += resolved.block; if(resolved.blockSource === 'roster') realBlockHours += resolved.block; else if(resolved.estimated) estimatedBlockHours += resolved.block; } });
         tripTimeTotal += computeTripTimeHours(d);
         return; // flatCredit is a manual override already above any per-segment minimum
       }
       let dayCredit = 0, dayHasMissing = false, dayRawBlock = 0;
       const dayShabbat = isShabbatDay(d);
       (d.legs || []).forEach((l, j) => {
-        const resolved = resolveLegBlock(l, estimates);
+        const resolved = rlb(l);
         if(resolved.block == null){ missingCount++; dayHasMissing = true; return; }
         if(resolved.estimated){ estimatedCount++; estimatedBlockHours += resolved.block; }
         if(resolved.blockSource === 'roster') realBlockHours += resolved.block;
@@ -2811,7 +3085,7 @@
         if(extra > 0.01){
           const reasons = [];
           if(veteranMult > 1) reasons.push('day ' + dayIndex[d.date] + ' veteran (14th+)');
-          rows.push({date: d.date, day: d.day, label: allRoutes || label, hours: extra, reasons});
+          rows.push({date: d.date, day: d.day, seq: i, label: allRoutes || label, hours: extra, reasons});
         }
         return;
       }
@@ -2835,9 +3109,13 @@
       });
       if(veteranMult > 1) reasonSet.add('day ' + dayIndex[d.date] + ' veteran (14th+)');
       if(secondActivityMult > 1) reasonSet.add('2nd flight activity same day');
-      if(dayExtra > 0.01) rows.push({date: d.date, day: d.day, label: routeSet.size ? [...routeSet].join('/') : (allRoutes || label), hours: dayExtra, reasons: [...reasonSet]});
+      if(dayExtra > 0.01) rows.push({date: d.date, day: d.day, seq: i, label: routeSet.size ? [...routeSet].join('/') : (allRoutes || label), hours: dayExtra, reasons: [...reasonSet]});
     });
-    return rows.sort((a, b) => b.hours - a.hours);
+    // Chronological order (oldest first). `days` is already in calendar order, so the row's
+    // position in it is the correct normalized sort key — works across month and year
+    // boundaries, and is stable for multiple entries sharing a date. Display order only;
+    // totals are computed in computeCreditCore, not from these rows.
+    return rows.sort((a, b) => a.seq - b.seq);
   }
 
   function calcCreditBreakdown(){
@@ -3322,10 +3600,17 @@
     reconDiffEl.style.color = reconActual === 0 ? '' : (Math.abs(reconDiff) < 50 ? 'var(--accent-cyan)' : 'var(--danger)');
 
     const status = document.getElementById('parse-status');
-    if(missingCount && status){
-      status.style.display = 'block';
-      status.style.color = 'var(--danger)';
-      status.textContent = missingCount + ' leg(s) have no block hours (likely a local-station-time PDF) — those count as 0 credit. Send that PDF to me in chat for an accurate parse.';
+    if(status){
+      if(missingCount){
+        status.style.display = 'block';
+        status.style.color = 'var(--accent-amber)';
+        status.dataset.missingBlockWarning = '1';
+        status.textContent = missingCount + ' leg(s) are missing block hours. Some local-station times could not be converted because an airport timezone or timestamp was unavailable — those legs count as 0 credit until you fill them in.';
+      } else if(status.dataset.missingBlockWarning === '1'){
+        // We put that warning up; nothing is missing now — take it down.
+        status.style.display = 'none';
+        delete status.dataset.missingBlockWarning;
+      }
     }
     if(typeof updatePeriodSummary === 'function') updatePeriodSummary();
   }
@@ -3335,7 +3620,7 @@
   recalcSalary();
 
   // ---- Persist reconciliation + annual-tracker fields across visits (this device only) ----
-  const PERSISTED_FIELDS = ['recon-actual','ann-dutydays','rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','flight-api-key','flight-airline-code','ftl-cap-duty7','ftl-cap-duty14','ftl-cap-duty28','ftl-cap-month','ftl-cap-3mo','ftl-cap-12mo','route-estimates','drive-time-minutes','home-base','airport-offsets'];
+  const PERSISTED_FIELDS = ['recon-actual','ann-dutydays','rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','backend-url','flight-airline-code','ftl-cap-duty7','ftl-cap-duty14','ftl-cap-duty28','ftl-cap-month','ftl-cap-3mo','ftl-cap-12mo','route-estimates','drive-time-minutes','home-base','airport-offsets'];
   (function loadPersistedFields(){
     let saved = {};
     try{ saved = JSON.parse(localStorage.getItem('crewboard-fields') || '{}'); } catch(e){}
@@ -3346,6 +3631,9 @@
     recalcSalary();
     renderFTL();
   })();
+  // First pass: if a backend URL is configured, register the loaded roster's legs
+  // and pull their cached flight status. No-op (zero network) when it's empty.
+  scheduleFlightStatusSync();
   PERSISTED_FIELDS.forEach(id => {
     document.getElementById(id).addEventListener('input', () => {
       let saved = {};
@@ -3356,6 +3644,8 @@
       if(id === 'route-estimates'){ renderRoster(); recalcSalary(); }
       // Home base / airport offsets feed the layover, per-diem, transport and import logic.
       if(id === 'home-base' || id === 'airport-offsets'){ renderRoster(); renderCalendar(); renderAvailableWindows(); recalcSalary(); }
+      // Backend URL / airline code change -> re-register + re-read cached flight status.
+      if(id === 'backend-url' || id === 'flight-airline-code'){ _fsRegistered.clear(); scheduleFlightStatusSync({ force: true }); }
     });
   });
 
