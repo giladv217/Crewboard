@@ -1055,6 +1055,11 @@
   const HOLIDAY_DATES = []; // TEMPLATE: add this year's holiday dates as 'DD/MM' strings, e.g. ['11/09','13/09']
   const DUTY_CODE_MAP = {ROFF:'Requested Day Off', CXL:'Canceled flight', OFF:'Day off', OFFP:'Paid day off', SBSM:'Standby — short morning', SBSE:'Standby — short evening', INS:'Instruction (ground)', PM:'Request evening off', MEMO:'Memo'};
   const MONTHLY_BLOCK_THRESHOLD = 83; // raw block hours per month; each hour above this earns 1.5x (extra +0.5/hr bonus)
+  // ── Route block-time table (CrewBoard Integration Step 3A) ──
+  // TEMPLATE: privacy-safe — the per-pilot route table lives ONLY in the private
+  // crewboard.html; here it is intentionally empty. Integer MINUTES, directional
+  // "FROM-TO" keys. FORECAST use only. Must exist before renderRoster() runs.
+  const DEFAULT_ROUTE_BLOCK_ESTIMATES = {};
   function dayOffset(dayAbbr, offset){
     const idx = WEEK.indexOf(dayAbbr);
     if(idx === -1) return dayAbbr;
@@ -1223,7 +1228,7 @@
       if(d.code === 'DUTY'){
         const idx = dayIndex[d.date];
         const dayShabbat = isShabbatDay(d);
-        const estimates = getRouteEstimates();
+        const estimates = getForecastEstimates();   // roster view shows the forecast, incl. route estimates
         const resolvedLegs = d.legs.map(l => resolveLegBlock(l, estimates));
         const knownLegs = resolvedLegs.filter(r => r.block != null);
         const anyEstimated = knownLegs.some(r => r.estimated);
@@ -1241,11 +1246,14 @@
           ${flags.length ? '<div class="day-flags">' + flags.join('') + '</div>' : ''}`;
         d.legs.forEach((l, j) => {
           const resolved = resolvedLegs[j];
-          const blockTag = resolved.block == null ? ''
-            : (resolved.estimated
-              ? `<span class="mono lg-block lg-block--est">(~${resolved.block.toFixed(2)}h est.)</span>`
-              : `<span class="mono lg-block">(${resolved.block.toFixed(2)}h)</span>`);
-          const timeHtml = l.time == null ? '<span class="mono" style="color:var(--danger)">no time</span>' : l.time;
+          const blockTag = resolved.blockSource === 'none'
+            ? `<span class="mono lg-block" style="opacity:.55">— no estimate</span>`
+            : (resolved.blockEstimated
+              ? `<span class="mono lg-block lg-block--est">${hhmm(resolved.blockMinutes)} est.</span>`
+              : `<span class="mono lg-block">(${resolved.blockHours.toFixed(2)}h)</span>`);
+          const timeHtml = l.time != null ? l.time
+            : ((resolved.blockSource === 'route_estimate' || resolved.blockSource === 'aerodatabox_schedule')
+              ? '' : '<span class="mono" style="color:var(--danger)">no time</span>');
           html += `<div class="lg">
             <div class="lg-l1"><span class="lg-route">${l.from || '?'} → ${l.to || '?'}</span><span class="lg-time">${timeHtml}</span></div>
             <div class="lg-l2"><span class="lg-flt">${l.flt || '?'}${l.ac ? ' [' + l.ac + ']' : ''}</span>${blockTag}${dayShabbat ? '<span class="lg-shb" role="img" aria-label="Shabbat window touched" title="Shabbat window touched (Fri 19:00 - Sat 21:00 Israel time)">SHB</span>' : ''}<button type="button" class="crew-btn lg-action" id="check-actual-${i}-${j}" onclick="checkActualTime(${i},${j})" title="Check actual times" aria-label="Check actual times for flight ${l.flt || ''}">🔍</button></div>
@@ -2076,7 +2084,7 @@
   function autofillWhatIfBlock(){
     const dest = document.getElementById('wi-dest').value.trim().toUpperCase();
     if(!dest) return;
-    const estimates = getRouteEstimates();
+    const estimates = getForecastEstimates();   // What-If is a forecast — pre-fill from the route table too
     const out = estimates[HOME + '-' + dest];
     const back = estimates[dest + '-' + HOME];
     if(out != null && back != null) document.getElementById('wi-block').value = (out + back).toFixed(2);
@@ -2121,7 +2129,7 @@
       return liveGetUnsched(d, l, i, j);
     };
 
-    const oldResult = computeIncomeForDataset(rosterData, null, liveGetUnsched, {includeSeniority: true});
+    const oldResult = computeIncomeForDataset(rosterData, null, liveGetUnsched, {includeSeniority: true, forecast: true});
 
     // A new offer REPLACES whatever was already scheduled that date — it doesn't stack on
     // top of it. Drop every existing entry for this date before adding the hypothetical one.
@@ -2129,7 +2137,7 @@
     const newRoster = rosterData.filter(d => d.date !== date);
     insertIntoCopy(newRoster, hypotheticalDay);
 
-    const newResult = computeIncomeForDataset(newRoster, null, hybridGetUnsched, {includeSeniority: true});
+    const newResult = computeIncomeForDataset(newRoster, null, hybridGetUnsched, {includeSeniority: true, forecast: true});
     const diff = newResult.totalIncome - oldResult.totalIncome;
 
     const newFlightIncentives = computeIncentiveDetail(newRoster, null, hybridGetUnsched).filter(r => r.date === date);
@@ -2526,7 +2534,12 @@
   // Standby/paid-off/instruction credit and flight-day count are now computed live from
   // rosterData (see countCode/countFlightDays above) so loading a new PDF updates them automatically.
 
+  // DEFAULT_ROUTE_BLOCK_ESTIMATES is declared near the top-of-script constants
+  // (it must exist before renderRoster() runs on load).
+
   function getRouteEstimates(){
+    // Textarea-only map (decimal hours). UNCHANGED — this is what the Actual
+    // reconciliation side keeps using, so its numbers are unaffected by the table.
     const el = document.getElementById('route-estimates');
     const text = el ? el.value : '';
     const map = {};
@@ -2536,11 +2549,55 @@
     });
     return map;
   }
-  function resolveLegBlock(l, estimates){
-    if(l.block != null) return {block: l.block, estimated: false};
-    const key = (l.from || '') + '-' + (l.to || '');
-    const est = estimates ? estimates[key] : undefined;
-    return est != null ? {block: est, estimated: true} : {block: null, estimated: false};
+  function getForecastEstimates(){
+    // Forecast-only map (decimal hours). The private DEFAULT table is
+    // authoritative and wins per route; the Settings textarea only fills routes
+    // the table doesn't cover (e.g. a brand-new destination).
+    const merged = {};
+    const textarea = getRouteEstimates();
+    for(const k in textarea) merged[k] = textarea[k];
+    for(const k in DEFAULT_ROUTE_BLOCK_ESTIMATES) merged[k] = DEFAULT_ROUTE_BLOCK_ESTIMATES[k] / 60;
+    return merged;
+  }
+  function hhmm(mins){
+    if(mins == null || isNaN(mins)) return '—';
+    const h = Math.floor(mins / 60), m = Math.round(mins % 60);
+    return h + ':' + String(m).padStart(2, '0');
+  }
+  // Block-time fallback hierarchy for ONE leg (salary forecasting only):
+  //   1 roster/real block  → blockSource "roster"              (leg.block, never overwritten)
+  //   2 manual route table → "route_estimate"
+  //   3 AeroDataBox sched.  → "aerodatabox_schedule"           (inactive in Step 3A — no ctx passed)
+  //   4 nothing             → "none"  (blockMinutes null)
+  // Returns the normalized envelope { blockMinutes, blockHours, blockSource,
+  // blockEstimated, blockAsOf, blockNote } PLUS legacy { block, estimated } keys
+  // so existing callers behave exactly as before.
+  function resolveLegBlock(l, estimates, ctx){
+    if(l && l.block != null){
+      return { blockMinutes: Math.round(l.block * 60), blockHours: l.block,
+               blockSource: 'roster', blockEstimated: false, blockAsOf: null, blockNote: null,
+               block: l.block, estimated: false };
+    }
+    const key = ((l && l.from) || '') + '-' + ((l && l.to) || '');
+    const estH = estimates ? estimates[key] : undefined;
+    if(estH != null){
+      return { blockMinutes: Math.round(estH * 60), blockHours: estH,
+               blockSource: 'route_estimate', blockEstimated: true, blockAsOf: null,
+               blockNote: 'route block-time table (' + key + ')',
+               block: estH, estimated: true };
+    }
+    const sbm = (ctx && ctx.flightStatus) ? ctx.flightStatus.scheduledBlockMinutes : null;
+    if(sbm != null && sbm >= 20 && sbm <= 1200){
+      return { blockMinutes: sbm, blockHours: sbm / 60,
+               blockSource: 'aerodatabox_schedule', blockEstimated: true,
+               blockAsOf: (ctx.flightStatus.checkedAt || null),
+               blockNote: 'AeroDataBox scheduled times',
+               block: sbm / 60, estimated: true };
+    }
+    return { blockMinutes: null, blockHours: null,
+             blockSource: 'none', blockEstimated: true, blockAsOf: null,
+             blockNote: 'no block estimate available',
+             block: null, estimated: false };
   }
 
   function computeCreditCore(days, opts){
@@ -2550,10 +2607,13 @@
     opts = opts || {};
     const getUnsched = opts.getUnsched || function(){ return false; };
     const maxDateObj = opts.maxDateObj || null;
-    const estimates = getRouteEstimates();
+    // Forecast/Predicted callers pass opts.forecast:true and get the private route
+    // table folded in. The Actual reconciliation caller does NOT, so its block
+    // hours stay based only on real roster/actual data — exactly as before.
+    const estimates = opts.forecast === true ? getForecastEstimates() : getRouteEstimates();
     const dayIndex = computeActivityDayIndices(days);
     const sameDayRank = computeSameDayDutyRank(days);
-    let block = 0, baseBlock = 0, completion = 0, missingCount = 0, estimatedCount = 0, rawBlockHours = 0, tripTimeTotal = 0;
+    let block = 0, baseBlock = 0, completion = 0, missingCount = 0, estimatedCount = 0, estimatedBlockHours = 0, rawBlockHours = 0, tripTimeTotal = 0;
     days.forEach((d, i) => {
       if(d.code !== 'DUTY') return;
       if(maxDateObj){
@@ -2565,7 +2625,7 @@
       if(d.flatCredit){
         block += d.flatCredit * veteranMult;
         baseBlock += d.flatCredit;
-        if(d.legs) d.legs.forEach(l => { const resolved = resolveLegBlock(l, estimates); if(resolved.block != null) rawBlockHours += resolved.block; });
+        if(d.legs) d.legs.forEach(l => { const resolved = resolveLegBlock(l, estimates); if(resolved.block != null){ rawBlockHours += resolved.block; if(resolved.estimated) estimatedBlockHours += resolved.block; } });
         tripTimeTotal += computeTripTimeHours(d);
         return; // flatCredit is a manual override already above any per-segment minimum
       }
@@ -2574,7 +2634,7 @@
       (d.legs || []).forEach((l, j) => {
         const resolved = resolveLegBlock(l, estimates);
         if(resolved.block == null){ missingCount++; dayHasMissing = true; return; }
-        if(resolved.estimated) estimatedCount++;
+        if(resolved.estimated){ estimatedCount++; estimatedBlockHours += resolved.block; }
         rawBlockHours += resolved.block;
         dayRawBlock += resolved.block;
         baseBlock += resolved.block;
@@ -2604,7 +2664,7 @@
     const overageExcess = Math.max(0, rawBlockHours - MONTHLY_BLOCK_THRESHOLD);
     const overageBonus = overageExcess * 0.5; // the +0.5/hr on top of the 1x already counted above
     const totalIncentives = (block - baseBlock) + overageBonus;
-    return {block, completion, missingCount, estimatedCount, rawBlockHours, overageExcess, overageBonus, totalIncentives, tripTimeTotal};
+    return {block, completion, missingCount, estimatedCount, estimatedBlockHours, rawBlockHours, overageExcess, overageBonus, totalIncentives, tripTimeTotal};
   }
 
   function computeIncentiveDetail(days, maxDateObj, getUnsched){
@@ -2622,17 +2682,22 @@
       const secondActivityMult = (sameDayRank[i] >= 1) ? 1.5 : 1;
       const dests = d.legs ? [...new Set(d.legs.map(l => l.to).filter(c => c && c !== HOME))] : [];
       const label = dests.length ? dests.join('/') : (d.legs && d.legs[0] ? d.legs[0].to : '');
+      // Display-only: full <origin>-<destination> of the leg(s) that earned the
+      // incentive, from the leg's own from/to fields (not inferred from HOME).
+      const legRoute = l => ((l && l.from) || '?') + '-' + ((l && l.to) || '?');
+      const allRoutes = d.legs ? [...new Set(d.legs.filter(l => l && (l.from || l.to)).map(legRoute))].join('/') : '';
       if(d.flatCredit){
         const extra = d.flatCredit * (veteranMult - 1);
         if(extra > 0.01){
           const reasons = [];
           if(veteranMult > 1) reasons.push('day ' + dayIndex[d.date] + ' veteran (14th+)');
-          rows.push({date: d.date, day: d.day, label, hours: extra, reasons});
+          rows.push({date: d.date, day: d.day, label: allRoutes || label, hours: extra, reasons});
         }
         return;
       }
       let dayExtra = 0;
       const reasonSet = new Set();
+      const routeSet = new Set();
       const dayShabbat = isShabbatDay(d);
       (d.legs || []).forEach((l, j) => {
         if(l.block == null) return;
@@ -2646,10 +2711,11 @@
         else if(shabbat){ mult = 1.5; reasonSet.add('Shabbat window touched'); }
         const combinedMult = Math.min(2, mult * veteranMult * secondActivityMult);
         dayExtra += l.block * (combinedMult - 1);
+        if(combinedMult > 1 && l.block > 0) routeSet.add(legRoute(l));
       });
       if(veteranMult > 1) reasonSet.add('day ' + dayIndex[d.date] + ' veteran (14th+)');
       if(secondActivityMult > 1) reasonSet.add('2nd flight activity same day');
-      if(dayExtra > 0.01) rows.push({date: d.date, day: d.day, label, hours: dayExtra, reasons: [...reasonSet]});
+      if(dayExtra > 0.01) rows.push({date: d.date, day: d.day, label: routeSet.size ? [...routeSet].join('/') : (allRoutes || label), hours: dayExtra, reasons: [...reasonSet]});
     });
     return rows.sort((a, b) => b.hours - a.hours);
   }
@@ -2659,7 +2725,8 @@
       getUnsched: (d, l, i, j) => {
         const cb = document.querySelector(`.unsched-check[data-day="${i}"][data-leg="${j}"]`);
         return cb ? cb.checked : false;
-      }
+      },
+      forecast: true   // the live Salary tab is a forecast — route estimates apply
     });
   }
 
@@ -2669,7 +2736,7 @@
     // and the manual Ground Activity fields are excluded — they're single period-wide numbers,
     // not date-stamped, so they can't be fairly split for a partial-period comparison.
     overrides = overrides || {};
-    const core = computeCreditCore(days, {getUnsched, maxDateObj});
+    const core = computeCreditCore(days, {getUnsched, maxDateObj, forecast: overrides.forecast === true});
     const completion = overrides.completion != null ? overrides.completion : core.completion;
     const tripTimeTotal = overrides.tripTimeTotal != null ? overrides.tripTimeTotal : core.tripTimeTotal;
     const standbyCredit = countCode('SBSM', maxDateObj, days) * STANDBY_UNIT + countCode('SBSE', maxDateObj, days) * STANDBY_UNIT;
@@ -2694,7 +2761,7 @@
     const perDiemILS = perDiemPay * fx;
     const totalIncome = creditPay + seniority + transportPay + perDiemILS;
 
-    return {totalIncome, totalCreditHours, flightDays, transportUnits, perDiemUnits, missingCount: core.missingCount, estimatedCount: core.estimatedCount, rawBlockHours: core.rawBlockHours, tripTimeTotal, completion, block: core.block, totalIncentives: core.totalIncentives};
+    return {totalIncome, totalCreditHours, flightDays, transportUnits, perDiemUnits, missingCount: core.missingCount, estimatedCount: core.estimatedCount, estimatedBlockHours: core.estimatedBlockHours, rawBlockHours: core.rawBlockHours, tripTimeTotal, completion, block: core.block, totalIncentives: core.totalIncentives};
   }
 
   // ---- AIMS payroll workbook parser (a different file than the "Personal Schedule Report" —
@@ -2954,7 +3021,7 @@
     const resultEl = document.getElementById('recon-file-result');
     if(!resultEl) return;
 
-    const predicted = computeIncomeForDataset(rosterData, maxDateObj, predictedGetUnsched, {includeSeniority: true});
+    const predicted = computeIncomeForDataset(rosterData, maxDateObj, predictedGetUnsched, {includeSeniority: true, forecast: true});
     let actualOverrides = null;
     if(dutyTotals){
       let tripTimeTotal = 0, completion = 0;
@@ -3039,7 +3106,7 @@
     return units;
   }
   function countPerDiemUnits(maxDateObj, days){
-    // $85/unit: one unit per unique non-home, non-Eilat (ETH/ETM) destination touched on a flight day,
+    // $85/unit: one unit per unique non-home, non-Eilat (ETM) destination touched on a flight day,
     // plus one unit per layover day (even with zero flight activity that day).
     days = days || rosterData;
     let units = 0;
@@ -3073,7 +3140,7 @@
     const gaCancelled = parseFloat(document.getElementById('ga-cancelled').value) || 0;
     const gaTotal = gaTraining + gaProject + gaSpecialCall + gaCancelled;
 
-    const {block: blockCredit, completion, missingCount, estimatedCount, rawBlockHours, overageExcess, overageBonus, totalIncentives} = calcCreditBreakdown();
+    const {block: blockCredit, completion, missingCount, estimatedCount, estimatedBlockHours, rawBlockHours, overageExcess, overageBonus, totalIncentives} = calcCreditBreakdown();
     const standbyCredit = countCode('SBSM') * STANDBY_UNIT + countCode('SBSE') * STANDBY_UNIT;
     const paidoffCredit = countCode('OFFP') * PAIDOFF_UNIT;
     const insCredit = countCode('INS') * INS_UNIT;
@@ -3092,7 +3159,7 @@
 
     document.getElementById('brk-block').textContent = blockCredit.toFixed(2) + 'h';
     document.getElementById('brk-overage').textContent = overageBonus.toFixed(2) + 'h';
-    document.getElementById('brk-overage-sub').textContent = rawBlockHours.toFixed(2) + 'h flown this period · ' + overageExcess.toFixed(2) + 'h above the ' + MONTHLY_BLOCK_THRESHOLD + 'h threshold';
+    document.getElementById('brk-overage-sub').textContent = rawBlockHours.toFixed(2) + 'h flown this period' + (estimatedBlockHours > 0.01 ? ' (incl. ~' + estimatedBlockHours.toFixed(1) + 'h estimated)' : '') + ' · ' + overageExcess.toFixed(2) + 'h above the ' + MONTHLY_BLOCK_THRESHOLD + 'h threshold';
 
     const blockPct = Math.min(100, (rawBlockHours / MONTHLY_BLOCK_THRESHOLD) * 100);
     document.getElementById('thresh-block-label').textContent = rawBlockHours.toFixed(2) + 'h / ' + MONTHLY_BLOCK_THRESHOLD + 'h';
@@ -3121,7 +3188,7 @@
     document.getElementById('brk-perdiem-ils').textContent = '₪' + perDiemILS.toLocaleString(undefined,{maximumFractionDigits:0});
     document.getElementById('brk-total-income').textContent = '₪' + totalIncome.toLocaleString(undefined,{maximumFractionDigits:0});
     document.getElementById('salary-total').textContent = '₪' + totalIncome.toLocaleString(undefined,{maximumFractionDigits:0});
-    document.querySelector('.gauge-sub').textContent = totalCreditHours.toFixed(2) + ' credit hrs' + (missingCount ? ' · ' + missingCount + ' leg(s) missing block hours' : '') + (estimatedCount ? ' · ' + estimatedCount + ' leg(s) using route estimates' : '');
+    document.querySelector('.gauge-sub').textContent = totalCreditHours.toFixed(2) + ' credit hrs' + (missingCount ? ' · ' + missingCount + ' leg(s) missing block hours' : '') + (estimatedCount ? ' · forecast incl. ~' + estimatedBlockHours.toFixed(1) + 'h estimated block (' + estimatedCount + ' leg' + (estimatedCount === 1 ? '' : 's') + ')' : '');
 
     const reconActual = parseFloat(document.getElementById('recon-actual').value) || 0;
     document.getElementById('recon-predicted').textContent = '₪' + totalIncome.toLocaleString(undefined,{maximumFractionDigits:0});
