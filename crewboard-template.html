@@ -184,6 +184,33 @@
   @keyframes modalSlideUp{from{transform:translateY(100%);} to{transform:translateY(0);}}
   .crew-modal{background:var(--panel); border-radius:18px 18px 0 0; width:100%; max-width:430px; padding:18px; max-height:70vh; overflow-y:auto; box-sizing:border-box; box-shadow:0 -12px 32px rgba(0,0,0,.45);}
   .crew-modal-title{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:16px; margin-bottom:12px; display:flex; justify-content:space-between; align-items:center; color:var(--text-primary);}
+
+  /* First-run onboarding */
+  .onb-overlay{position:fixed; inset:0; z-index:2000; background:var(--bg-deep); overflow-y:auto; display:flex; align-items:flex-start; justify-content:center; padding:calc(28px + env(safe-area-inset-top)) 18px calc(28px + env(safe-area-inset-bottom));}
+  .onb-overlay[hidden]{display:none;}
+  .onb-card{width:100%; max-width:420px; background:var(--panel); border:1px solid var(--divider); border-radius:var(--r-lg); padding:24px 20px; box-shadow:var(--shadow-card); box-sizing:border-box;}
+  .onb-star{display:flex; justify-content:center; margin-bottom:10px;}
+  .onb-title{font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:var(--fs-h1); line-height:var(--lh-tight); text-align:center; margin:0 0 4px; color:var(--text-primary);}
+  .onb-sub{text-align:center; color:var(--text-muted); font-size:var(--fs-small); margin:0 0 20px;}
+  .onb-field{margin-bottom:16px;}
+  .onb-field > label{display:block; font-size:12px; color:var(--text-muted); margin-bottom:6px; font-family:'IBM Plex Mono', monospace; letter-spacing:0.04em; line-height:1.4;}
+  .onb-hint-txt{text-transform:none; letter-spacing:0; opacity:.85;}
+  .onb-field .input-wrap{display:flex; align-items:center; min-height:var(--tap-min); background:var(--panel-raised); border:1px solid var(--divider); border-radius:9px; padding:0 12px;}
+  .onb-field .input-wrap > span{color:var(--text-muted); margin-right:6px; flex-shrink:0;}
+  .onb-field .input-wrap input{flex:1; width:100%; min-height:var(--tap-min); background:transparent; border:none; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:var(--fs-body); box-sizing:border-box; -webkit-appearance:none; appearance:none;}
+  .onb-field .input-wrap input:focus{outline:none;}
+  .onb-field .input-wrap:focus-within{border-color:var(--accent-cyan); box-shadow:var(--ring-cyan);}
+  .onb-seg{display:flex; gap:8px;}
+  .onb-seg-btn{flex:1; min-height:var(--tap-min); padding:10px 8px; background:var(--panel-raised); border:1px solid var(--divider); border-radius:9px; color:var(--text-primary); font-family:'Space Grotesk', sans-serif; font-weight:600; font-size:var(--fs-small); cursor:pointer; -webkit-tap-highlight-color:transparent;}
+  .onb-seg-btn[aria-checked="true"]{border-color:var(--accent-cyan); color:var(--accent-cyan); box-shadow:var(--ring-cyan);}
+  .onb-seg-btn:focus-visible{outline:2px solid var(--accent-cyan); outline-offset:2px;}
+  .onb-error{color:var(--danger); font-size:var(--fs-small); text-align:center; margin:0 0 10px;}
+  .onb-error[hidden]{display:none;}
+  .onb-privacy{text-align:center; color:var(--text-muted); font-size:var(--fs-caption); margin:12px 0 0; line-height:1.5;}
+  .onb-hint{background:var(--panel); border:1px solid var(--accent-cyan); border-radius:var(--r-md); padding:14px; margin-bottom:14px;}
+  .onb-hint[hidden]{display:none;}
+  .onb-hint p{margin:0 0 10px; font-size:var(--fs-small); color:var(--text-primary); line-height:1.5;}
+  .onb-hint-dismiss{display:block; width:100%; margin-top:8px; background:transparent; border:none; color:var(--text-muted); font-size:var(--fs-caption); cursor:pointer; min-height:var(--tap-min); -webkit-tap-highlight-color:transparent;}
   .crew-row{display:flex; justify-content:space-between; padding:9px 0; border-bottom:1px solid var(--divider); font-size:13px; color:var(--text-primary);}
   .crew-row:last-child{border-bottom:none;}
   .crew-pos{color:var(--text-muted); font-family:'IBM Plex Mono', monospace; font-size:11px;}
@@ -351,6 +378,9 @@
   .lg-flt{font-family:'IBM Plex Mono', monospace; color:var(--accent-amber); font-size:var(--fs-caption); white-space:nowrap;}
   .lg-block{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); color:var(--text-muted); white-space:nowrap;}
   .lg-block--est{color:var(--accent-amber);}
+  .lg-block--none{opacity:.6; display:inline-flex; align-items:center; gap:6px; flex-wrap:wrap;}
+  .lg-addest{background:transparent; border:1px solid var(--accent-cyan); color:var(--accent-cyan); font-family:'IBM Plex Mono', monospace; font-size:10px; line-height:1; padding:3px 6px; border-radius:var(--r-pill, 999px); cursor:pointer; -webkit-tap-highlight-color:transparent;}
+  .lg-addest:active{background:var(--panel-raised);}
   .lg-shb{font-family:'IBM Plex Mono', monospace; font-size:var(--fs-micro); font-weight:700; letter-spacing:0.04em; color:var(--accent-cyan); border:1px solid var(--accent-cyan); border-radius:var(--r-xs); padding:2px 5px; white-space:nowrap;}
   .lg-action{margin-left:auto;}
   .lg-unsched{display:flex; align-items:center; gap:10px; min-height:var(--tap-min); margin-top:2px; cursor:pointer; -webkit-tap-highlight-color:transparent;}
@@ -379,7 +409,7 @@
     <div style="flex:1; min-width:0;">
       <div class="eyebrow" style="display:flex; align-items:center; gap:6px;">
         <svg width="14" height="14" viewBox="0 0 24 24" style="flex-shrink:0;" aria-hidden="true"><polygon points="12,1 15,9 24,9 17,14.5 19.5,23 12,17.8 4.5,23 7,14.5 0,9 9,9" fill="#F2A93B"/></svg>
-        ISRAIR · FO A320 · YOUR BASE
+        <span id="identity-line">ISRAIR · FO A320 · YOUR BASE</span>
       </div>
       <h1 class="title" id="header-title">Roster</h1>
     </div>
@@ -398,6 +428,11 @@
       <div id="roster-empty" class="roster-empty" hidden>
         <p class="help-text" style="margin-top:0; margin-bottom:12px;">No roster is loaded on this device yet.</p>
         <button type="button" class="load-btn js-load-roster" onclick="document.getElementById('pdf-input').click()">Load Roster (XLSX/CSV)</button>
+      </div>
+      <div id="sample-roster-hint" class="onb-hint" hidden>
+        <p>You're looking at sample data. Import your roster to see your real schedule and pay.</p>
+        <button type="button" class="share-btn" onclick="document.getElementById('pdf-input').click()">Import Roster</button>
+        <button type="button" class="onb-hint-dismiss" onclick="dismissSampleHint()">Not now</button>
       </div>
       <div id="add-flight-form" style="display:none; margin-top:12px; border:1px solid var(--accent-cyan); border-radius:12px; padding:12px; background:var(--panel);">
         <h3 class="eyebrow" style="margin-bottom:8px;">Add Flight</h3>
@@ -576,6 +611,19 @@
       <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Appearance</h2>
       <button type="button" class="load-btn v-neutral" id="theme-toggle-btn" onclick="toggleTheme()">🌙 Theme: Dark</button>
 
+      <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Your Profile</h2>
+      <div class="field-group">
+        <label for="pilot-role">Role</label>
+        <div class="input-wrap"><select id="pilot-role" style="flex:1; background:transparent; border:none; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:var(--fs-body); min-height:var(--tap-min);">
+          <option value="">Select…</option>
+          <option value="CAPTAIN">Captain</option>
+          <option value="FIRST_OFFICER">First Officer</option>
+        </select></div>
+      </div>
+      <div class="help-text" style="margin-top:0;">Stored for future role-specific features. It does not change any pay calculation today. Your hourly pay, seniority, travel and commute values are in <b>Pay Rates</b> and <b>Commute</b> below — editing them there is the same as editing them here.</div>
+      <button type="button" class="load-btn v-neutral" style="margin-top:6px;" onclick="resetPersonalProfile(this)">Reset personal profile</button>
+      <div class="help-text" style="margin-top:6px;">Clears your role and pay values on this device and reopens the welcome setup. <b>Your roster is not touched.</b></div>
+
       <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Pay Rates</h2>
       <div class="field-group">
         <label>Hourly Rate (₪/credit hr) <span class="mono hint">(base + CPI + seniority row, from your payslip)</span></label>
@@ -621,6 +669,12 @@
       <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Route Block-Hour Estimates <span class="mono hint hint--plain">(fills in flights missing real times)</span></h2>
       <div class="help-text" style="margin-top:0;">Future/unflown legs have no real time data yet, so they show blank. One line per route, e.g. <span class="mono">TLV-BUD: 3.4</span> — any leg missing real block hours will use this as an estimate instead, clearly marked as estimated rather than confirmed. Direction matters if it differs (winds etc.) — add both TLV-BUD and BUD-TLV separately if needed.</div>
       <textarea id="route-estimates" rows="12" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:12px;" placeholder="TLV-BUD: 3.4&#10;BUD-TLV: 3.6&#10;TLV-JFK: 12.1&#10;JFK-TLV: 11.3"></textarea>
+      <div style="display:flex; gap:8px; margin-top:8px;">
+        <button type="button" class="load-btn v-neutral" style="flex:1;" onclick="exportRouteEstimates()">Export estimates</button>
+        <button type="button" class="load-btn v-neutral" style="flex:1;" onclick="document.getElementById('route-estimates-import').click()">Import estimates</button>
+      </div>
+      <input type="file" id="route-estimates-import" accept=".json,application/json" class="sr-only" tabindex="-1" aria-hidden="true" onchange="handleRouteEstimateImport(event)">
+      <div class="help-text" style="margin-top:6px;">Export/import is a plain JSON file containing <b>only</b> your route table — no roster, pay, role, or other settings. It never leaves this device except as a file you save yourself.</div>
 
       <h2 class="eyebrow" style="margin-top:20px; margin-bottom:8px;">Airport UTC Offsets <span class="mono hint hint--plain">(for "Local Station" roster imports)</span></h2>
       <div class="help-text" style="margin-top:0;">Only used when an imported roster's times are in local station time rather than UTC. One line per airport, e.g. <span class="mono">BUD: 2</span> (hours ahead of UTC; use <span class="mono">-5</span> for behind). These are fixed offsets — they don't follow daylight-saving, so a UTC roster export is always more accurate. A leg whose airport has no offset here keeps its block time as unknown rather than guessing.</div>
@@ -742,6 +796,43 @@
           <div class="help-text" style="margin-top:8px; text-align:left;">Check a flight's box if it was unscheduled — its block hours count at 1.5×. Shabbat (Fri 19:00 – Sat 19:00 Israel time) is auto-detected (SHB badge) — capped at 2× if a leg is both unscheduled and Shabbat. Holiday-eve/holiday dates (HOL badge) pay flat 2×. A day's 2nd separate flight activity (2nd ACT badge) pays 1.5× — doesn't apply to one continuous multi-destination trip. From your 14th activity day onward (DUTY + LAYOVER count, standby doesn't), duty days get an extra 1.5× (red badge). Any block hours flown this period above 83h earn a further 1.5×. Cancelled flights (CXL) earn a flat 3h credit.</div>
         </div>
       </div>
+    </div>
+  </div>
+
+  <div class="onb-overlay" id="onboarding-overlay" hidden>
+    <div class="onb-card" role="dialog" aria-modal="true" aria-labelledby="onb-title" tabindex="-1">
+      <div class="onb-star" aria-hidden="true"><svg width="32" height="32" viewBox="0 0 24 24"><polygon points="12,1 15,9 24,9 17,14.5 19.5,23 12,17.8 4.5,23 7,14.5 0,9 9,9" fill="#F2A93B"/></svg></div>
+      <h2 class="onb-title" id="onb-title">Welcome to CrewBoard</h2>
+      <p class="onb-sub" id="onb-sub">Let's set up your profile.</p>
+
+      <div class="onb-field">
+        <label id="onb-role-label">Your role</label>
+        <div class="onb-seg" role="radiogroup" aria-labelledby="onb-role-label">
+          <button type="button" class="onb-seg-btn" data-role="CAPTAIN" role="radio" aria-checked="false">Captain</button>
+          <button type="button" class="onb-seg-btn" data-role="FIRST_OFFICER" role="radio" aria-checked="false">First Officer</button>
+        </div>
+      </div>
+
+      <div class="onb-field">
+        <label for="onb-hourly">Hourly flight pay <span class="onb-hint-txt">(₪ per credit hour)</span></label>
+        <div class="input-wrap"><span aria-hidden="true">₪</span><input type="number" id="onb-hourly" inputmode="decimal" min="0" step="1" placeholder="e.g. 480" autocomplete="off"></div>
+      </div>
+      <div class="onb-field">
+        <label for="onb-seniority">Seniority addition <span class="onb-hint-txt">(₪ per roster period — optional)</span></label>
+        <div class="input-wrap"><span aria-hidden="true">₪</span><input type="number" id="onb-seniority" inputmode="decimal" min="0" step="50" placeholder="0" autocomplete="off"></div>
+      </div>
+      <div class="onb-field">
+        <label for="onb-travel">Travel reimbursement <span class="onb-hint-txt">(₪ per home-base departure / arrival day — optional)</span></label>
+        <div class="input-wrap"><span aria-hidden="true">₪</span><input type="number" id="onb-travel" inputmode="decimal" min="0" step="1" placeholder="0" autocomplete="off"></div>
+      </div>
+      <div class="onb-field">
+        <label for="onb-commute">Commute to work <span class="onb-hint-txt">(minutes, one way — optional)</span></label>
+        <div class="input-wrap"><input type="number" id="onb-commute" inputmode="numeric" min="0" step="5" placeholder="0" autocomplete="off"></div>
+      </div>
+
+      <p class="onb-error" id="onb-error" role="alert" hidden></p>
+      <button type="button" class="share-btn" id="onb-submit" onclick="submitOnboarding()">Start using CrewBoard</button>
+      <p class="onb-privacy">Your personal settings and roster are stored on this device.</p>
     </div>
   </div>
 
@@ -1358,7 +1449,7 @@
         d.legs.forEach((l, j) => {
           const resolved = resolvedLegs[j];
           const blockTag = resolved.blockSource === 'none'
-            ? `<span class="mono lg-block" style="opacity:.55">— no estimate</span>`
+            ? `<span class="mono lg-block lg-block--none">— no block estimate<button type="button" class="lg-addest" onclick="goAddRouteEstimate('${l.from || ''}','${l.to || ''}')">Add estimate</button></span>`
             : (resolved.blockEstimated
               ? `<span class="mono lg-block lg-block--est">${hhmm(resolved.blockMinutes)} est.</span>`
               : `<span class="mono lg-block">(${resolved.blockHours.toFixed(2)}h)</span>`);
@@ -2957,6 +3048,102 @@
     for(const k in DEFAULT_ROUTE_BLOCK_ESTIMATES) merged[k] = DEFAULT_ROUTE_BLOCK_ESTIMATES[k] / 60;
     return merged;
   }
+
+  // ---- Route Block-Hour Estimates: local-only export / import -----------------
+  // A portable JSON file with ONLY the route table (decimal hours). No roster,
+  // pay, role, commute, backend URL or any other setting. Never uploaded — it is
+  // a file the user saves and loads themselves; the table stays in localStorage.
+  const ROUTE_ESTIMATE_SCHEMA = 'crewboard.route-estimates/v1';
+  const ROUTE_KEY_RE = /^[A-Z]{3}-[A-Z]{3}$/;
+
+  // Pure — a decimal-hours route map -> versioned export doc, keys sorted.
+  function buildRouteEstimateExport(estimatesHours){
+    const routes = {};
+    Object.keys(estimatesHours || {}).sort().forEach(k => {
+      const key = String(k).toUpperCase();
+      const v = Number(estimatesHours[k]);
+      if(ROUTE_KEY_RE.test(key) && key.slice(0,3) !== key.slice(4,7) && Number.isFinite(v) && v > 0 && v <= 20){
+        routes[key] = Math.round(v * 100) / 100;
+      }
+    });
+    return { schema: ROUTE_ESTIMATE_SCHEMA, routes: routes };
+  }
+
+  // Pure — parse + validate an import file's text. Malformed entries are skipped,
+  // not fatal; only a wrong schema / shape / zero-valid-entries rejects.
+  function parseRouteEstimateImport(text){
+    let doc;
+    try { doc = JSON.parse(text); } catch(e){ return { ok:false, error:'That file is not valid JSON.' }; }
+    if(!doc || typeof doc !== 'object' || Array.isArray(doc)) return { ok:false, error:'Unrecognised file.' };
+    if(doc.schema !== ROUTE_ESTIMATE_SCHEMA) return { ok:false, error:'Not a CrewBoard route-estimates file.' };
+    if(!doc.routes || typeof doc.routes !== 'object' || Array.isArray(doc.routes)) return { ok:false, error:'The file has no route table.' };
+    const routes = {};
+    let skipped = 0;
+    for(const k of Object.keys(doc.routes)){
+      const key = String(k).toUpperCase().trim();
+      const v = Number(doc.routes[k]);
+      const okKey = ROUTE_KEY_RE.test(key) && key.slice(0,3) !== key.slice(4,7);
+      const okVal = Number.isFinite(v) && v >= 0.1 && v <= 20;
+      if(okKey && okVal) routes[key] = Math.round(v * 100) / 100;
+      else skipped++;
+    }
+    const added = Object.keys(routes).length;
+    if(added === 0) return { ok:false, error:'No valid route entries in that file.', skipped: skipped };
+    return { ok:true, routes: routes, added: added, skipped: skipped };
+  }
+
+  function exportRouteEstimates(){
+    const doc = buildRouteEstimateExport(getForecastEstimates());
+    const n = Object.keys(doc.routes).length;
+    if(n === 0){ if(typeof showToast === 'function') showToast('No route estimates to export yet'); return; }
+    try {
+      const blob = new Blob([JSON.stringify(doc, null, 2) + '\n'], { type: 'application/json' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = 'crewboard-route-estimates.json';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 0);
+      if(typeof showToast === 'function') showToast(n + ' route estimate' + (n === 1 ? '' : 's') + ' exported');
+    } catch(e){
+      if(typeof showToast === 'function') showToast("Couldn't create the export file on this device");
+    }
+  }
+
+  async function handleRouteEstimateImport(e){
+    const file = e && e.target && e.target.files && e.target.files[0];
+    if(e && e.target) e.target.value = '';
+    if(!file) return;
+    let text;
+    try { text = await file.text(); } catch(err){ if(typeof showToast === 'function') showToast("Couldn't read that file"); return; }
+    const r = parseRouteEstimateImport(text);
+    if(!r.ok){ if(typeof showToast === 'function') showToast('Import failed — ' + r.error); return; }
+    // Merge into the Settings textarea map (imported wins on conflict), rebuild sorted.
+    const merged = Object.assign({}, getRouteEstimates(), r.routes);
+    const ta = document.getElementById('route-estimates');
+    if(ta){
+      ta.value = Object.keys(merged).sort().map(k => k + ': ' + merged[k]).join('\n');
+      ta.dispatchEvent(new Event('input', { bubbles: true })); // persist + renderRoster + recalcSalary
+    }
+    if(typeof showToast === 'function'){
+      showToast(r.added + ' route estimate' + (r.added === 1 ? '' : 's') + ' imported' + (r.skipped ? ' · ' + r.skipped + ' skipped' : ''));
+    }
+  }
+
+  // Roster "Add estimate" affordance for a blockSource:"none" leg.
+  function goAddRouteEstimate(from, to){
+    if(typeof switchTab === 'function') switchTab('settings');
+    const ta = document.getElementById('route-estimates');
+    if(ta){
+      try { ta.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch(e){ try { ta.scrollIntoView(); } catch(_){} }
+      setTimeout(() => { try { ta.focus(); } catch(e){} }, 320);
+    }
+    const f = String(from || '').toUpperCase(), t = String(to || '').toUpperCase();
+    if(typeof showToast === 'function' && ROUTE_KEY_RE.test(f + '-' + t)){
+      showToast('Add a line like  ' + f + '-' + t + ': 3.5  in the box');
+    }
+  }
+
   function hhmm(mins){
     if(mins == null || isNaN(mins)) return '—';
     const h = Math.floor(mins / 60), m = Math.round(mins % 60);
@@ -3634,7 +3821,7 @@
   recalcSalary();
 
   // ---- Persist reconciliation + annual-tracker fields across visits (this device only) ----
-  const PERSISTED_FIELDS = ['recon-actual','ann-dutydays','rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','backend-url','flight-airline-code','ftl-cap-duty7','ftl-cap-duty14','ftl-cap-duty28','ftl-cap-month','ftl-cap-3mo','ftl-cap-12mo','route-estimates','drive-time-minutes','home-base','airport-offsets'];
+  const PERSISTED_FIELDS = ['recon-actual','ann-dutydays','pilot-role','rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','backend-url','flight-airline-code','ftl-cap-duty7','ftl-cap-duty14','ftl-cap-duty28','ftl-cap-month','ftl-cap-3mo','ftl-cap-12mo','route-estimates','drive-time-minutes','home-base','airport-offsets'];
   (function loadPersistedFields(){
     let saved = {};
     try{ saved = JSON.parse(localStorage.getItem('crewboard-fields') || '{}'); } catch(e){}
@@ -3658,10 +3845,211 @@
       if(id === 'route-estimates'){ renderRoster(); recalcSalary(); }
       // Home base / airport offsets feed the layover, per-diem, transport and import logic.
       if(id === 'home-base' || id === 'airport-offsets'){ renderRoster(); renderCalendar(); renderAvailableWindows(); recalcSalary(); }
+      if(id === 'pilot-role' || id === 'home-base'){ if(typeof updateIdentityLine === 'function') updateIdentityLine(); }
       // Backend URL / airline code change -> re-register + re-read cached flight status.
       if(id === 'backend-url' || id === 'flight-airline-code'){ _fsRegistered.clear(); scheduleFlightStatusSync({ force: true }); }
     });
   });
+
+  // ============================ Personal profile / first-run onboarding =========
+  // ONE authoritative store: the existing `crewboard-fields` object. Onboarding
+  // writes the SAME keys the Settings inputs use — there is no parallel store.
+  // Local-only: nothing here is ever sent to a network, a backend, or a file.
+  const PROFILE_FIELD = { role:'pilot-role', hourly:'rate-hourly', seniority:'seniority-value', travel:'rate-transport', commute:'drive-time-minutes' };
+  const PROFILE_VERSION = 1;
+  function _fieldsStore(){ try { return JSON.parse(localStorage.getItem('crewboard-fields') || '{}') || {}; } catch(e){ return {}; } }
+  function _writeFieldsStore(s){ localStorage.setItem('crewboard-fields', JSON.stringify(s)); }
+
+  // Pure — derive the profile view from a plain store object.
+  function profileFromStore(s){
+    s = s || {};
+    const role = (s[PROFILE_FIELD.role] === 'CAPTAIN' || s[PROFILE_FIELD.role] === 'FIRST_OFFICER') ? s[PROFILE_FIELD.role] : null;
+    const num = k => { const v = s[k]; if(v == null || String(v).trim() === '') return null; const n = Number(v); return Number.isFinite(n) ? n : null; };
+    const commute = num(PROFILE_FIELD.commute);
+    return {
+      version: PROFILE_VERSION,
+      role: role,
+      hourlyRate: num(PROFILE_FIELD.hourly),
+      seniorityAddition: num(PROFILE_FIELD.seniority),
+      travelReimbursement: num(PROFILE_FIELD.travel),
+      commuteMinutes: commute == null ? null : Math.max(0, Math.round(commute))
+    };
+  }
+  // Pure — a profile is usable once a role and a valid non-negative hourly rate exist.
+  function isProfileComplete(s){
+    const p = profileFromStore(s);
+    return p.role != null && p.hourlyRate != null && p.hourlyRate >= 0;
+  }
+  // Pure — validate raw onboarding form values.
+  function validateOnboarding(raw){
+    raw = raw || {};
+    const errors = [];
+    const role = raw.role;
+    if(role !== 'CAPTAIN' && role !== 'FIRST_OFFICER') errors.push('Select your role — Captain or First Officer.');
+    const chk = (v, label, required) => {
+      const blank = (v == null || String(v).trim() === '');
+      if(blank) { if(required) errors.push(label + ' is required.'); return null; }
+      const n = Number(v);
+      if(!Number.isFinite(n)) { errors.push(label + ' must be a number.'); return null; }
+      if(n < 0) { errors.push(label + " can't be negative."); return null; }
+      return n;
+    };
+    const hourlyRate = chk(raw.hourly, 'Hourly flight pay', true);
+    const seniorityAddition = chk(raw.seniority, 'Seniority addition', false);
+    const travelReimbursement = chk(raw.travel, 'Travel reimbursement', false);
+    let commuteMinutes = chk(raw.commute, 'Commute time', false);
+    if(commuteMinutes != null) commuteMinutes = Math.max(0, Math.round(commuteMinutes));
+    return { ok: errors.length === 0, errors: errors,
+             normalized: { role: (role === 'CAPTAIN' || role === 'FIRST_OFFICER') ? role : null,
+                           hourlyRate, seniorityAddition, travelReimbursement, commuteMinutes } };
+  }
+  // Pure — write normalized values into a store object (only the ones provided).
+  function applyProfileToStore(s, n){
+    s = Object.assign({}, s || {});
+    if(n.role != null) s[PROFILE_FIELD.role] = n.role;
+    if(n.hourlyRate != null) s[PROFILE_FIELD.hourly] = String(n.hourlyRate);
+    if(n.seniorityAddition != null) s[PROFILE_FIELD.seniority] = String(n.seniorityAddition);
+    if(n.travelReimbursement != null) s[PROFILE_FIELD.travel] = String(n.travelReimbursement);
+    if(n.commuteMinutes != null) s[PROFILE_FIELD.commute] = String(n.commuteMinutes);
+    return s;
+  }
+  // Pure — remove only the personal-profile keys (roster + everything else untouched).
+  function stripProfileKeys(s){
+    s = Object.assign({}, s || {});
+    Object.keys(PROFILE_FIELD).forEach(k => { delete s[PROFILE_FIELD[k]]; });
+    return s;
+  }
+
+  function updateIdentityLine(){
+    const el = document.getElementById('identity-line');
+    if(!el) return;
+    const s = _fieldsStore();
+    const p = profileFromStore(s);
+    const roleTxt = p.role === 'CAPTAIN' ? 'CPT' : p.role === 'FIRST_OFFICER' ? 'FO' : null;
+    const baseEl = document.getElementById('home-base');
+    const base = String((s['home-base'] != null ? s['home-base'] : (baseEl ? baseEl.value : '')) || '').trim().toUpperCase();
+    el.textContent = 'ISRAIR · ' + (roleTxt ? roleTxt + ' ' : '') + 'A320' + (base ? ' · ' + base : (roleTxt ? '' : ' · YOUR BASE'));
+  }
+
+  let _onbRole = null;
+  function _onbSetRole(r){
+    _onbRole = (r === 'CAPTAIN' || r === 'FIRST_OFFICER') ? r : null;
+    document.querySelectorAll('#onboarding-overlay .onb-seg-btn').forEach(b => {
+      b.setAttribute('aria-checked', b.getAttribute('data-role') === _onbRole ? 'true' : 'false');
+    });
+  }
+  function _syncProfileInputsFromStore(){
+    const s = _fieldsStore();
+    Object.keys(PROFILE_FIELD).forEach(k => {
+      const id = PROFILE_FIELD[k], el = document.getElementById(id);
+      if(el && s[id] != null) el.value = s[id];
+    });
+    const roleEl = document.getElementById('pilot-role');
+    if(roleEl && s[PROFILE_FIELD.role] == null) roleEl.value = '';
+    if(typeof updateIdentityLine === 'function') updateIdentityLine();
+    if(typeof recalcSalary === 'function') recalcSalary();
+    if(typeof renderFTL === 'function') renderFTL();
+  }
+  function showOnboarding(){
+    const ov = document.getElementById('onboarding-overlay');
+    if(!ov) return;
+    const cur = _fieldsStore();
+    const has = k => cur[k] != null && String(cur[k]).trim() !== '';
+    _onbSetRole(profileFromStore(cur).role);
+    const set = (id, k) => { const el = document.getElementById(id); if(el) el.value = has(k) ? cur[k] : ''; };
+    set('onb-hourly', PROFILE_FIELD.hourly);
+    set('onb-seniority', PROFILE_FIELD.seniority);
+    set('onb-travel', PROFILE_FIELD.travel);
+    set('onb-commute', PROFILE_FIELD.commute);
+    const known = ['hourly','seniority','travel','commute'].some(k => has(PROFILE_FIELD[k]));
+    document.getElementById('onb-title').textContent = known ? 'Finish setting up CrewBoard' : 'Welcome to CrewBoard';
+    document.getElementById('onb-sub').textContent = known ? 'Confirm your details to continue.' : "Let's set up your profile.";
+    const errEl = document.getElementById('onb-error'); if(errEl) errEl.hidden = true;
+    ov.hidden = false;
+    document.body.style.overflow = 'hidden';
+    if(window.setBackgroundInert) window.setBackgroundInert(true);
+    const card = ov.querySelector('.onb-card');
+    if(window.trapFocus) window.trapFocus(card);
+    else if(card) { try { card.focus(); } catch(e){} }
+  }
+  function hideOnboarding(){
+    const ov = document.getElementById('onboarding-overlay');
+    if(!ov) return;
+    ov.hidden = true;
+    document.body.style.overflow = '';
+    if(window.setBackgroundInert) window.setBackgroundInert(false);
+    if(window.releaseFocus) window.releaseFocus();
+  }
+  function submitOnboarding(){
+    const g = id => { const el = document.getElementById(id); return el ? el.value : ''; };
+    const v = validateOnboarding({ role: _onbRole, hourly: g('onb-hourly'), seniority: g('onb-seniority'), travel: g('onb-travel'), commute: g('onb-commute') });
+    const errEl = document.getElementById('onb-error');
+    if(!v.ok){ if(errEl){ errEl.textContent = v.errors[0]; errEl.hidden = false; } return; }
+    try { _writeFieldsStore(applyProfileToStore(_fieldsStore(), v.normalized)); }
+    catch(e){ if(errEl){ errEl.textContent = "Couldn't save to this device's storage — check it isn't full or disabled."; errEl.hidden = false; } return; }
+    if(!isProfileComplete(_fieldsStore())){ if(errEl){ errEl.textContent = 'Something went wrong saving your profile. Please try again.'; errEl.hidden = false; } return; }
+    _syncProfileInputsFromStore();
+    hideOnboarding();
+    if(typeof showToast === 'function') showToast('Profile saved on this device');
+    if(!localStorage.getItem(ROSTER_STORE_KEY)){
+      if(typeof switchTab === 'function') switchTab('roster');
+      _maybeShowSampleHint();
+    }
+  }
+  function maybeShowOnboarding(){
+    if(!isProfileComplete(_fieldsStore())) showOnboarding();
+    else if(typeof updateIdentityLine === 'function') updateIdentityLine();
+  }
+  let _resetArmedAt = 0;
+  function resetPersonalProfile(btn){
+    const now = Date.now();
+    if(now - _resetArmedAt > 4000){
+      _resetArmedAt = now;
+      if(!btn.dataset.label) btn.dataset.label = btn.textContent;
+      btn.textContent = 'Tap again to reset — your roster is kept';
+      setTimeout(() => { if(Date.now() - _resetArmedAt >= 4000 && btn.dataset.label) btn.textContent = btn.dataset.label; }, 4300);
+      return;
+    }
+    _resetArmedAt = 0;
+    try { _writeFieldsStore(stripProfileKeys(_fieldsStore())); } catch(e){}
+    // Reset only the profile inputs to their HTML defaults; roster and every
+    // other setting (per-diem, fx, home base, FTL caps, route table…) untouched.
+    [['rate-hourly','0'],['seniority-value','0'],['rate-transport','0'],['drive-time-minutes','0']].forEach(pair => {
+      const el = document.getElementById(pair[0]); if(el) el.value = pair[1];
+    });
+    const roleEl = document.getElementById('pilot-role'); if(roleEl) roleEl.value = '';
+    if(btn.dataset.label) btn.textContent = btn.dataset.label;
+    if(typeof recalcSalary === 'function') recalcSalary();
+    if(typeof updateIdentityLine === 'function') updateIdentityLine();
+    if(typeof showToast === 'function') showToast('Personal profile reset — roster kept');
+    maybeShowOnboarding();
+  }
+  function _maybeShowSampleHint(){
+    const hint = document.getElementById('sample-roster-hint');
+    if(!hint) return;
+    let dismissed = '0';
+    try { dismissed = localStorage.getItem('crewboard-sample-hint-dismissed') || '0'; } catch(e){}
+    hint.hidden = !(!localStorage.getItem(ROSTER_STORE_KEY) && dismissed !== '1' && isProfileComplete(_fieldsStore()));
+  }
+  function dismissSampleHint(){
+    try { localStorage.setItem('crewboard-sample-hint-dismissed', '1'); } catch(e){}
+    const h = document.getElementById('sample-roster-hint'); if(h) h.hidden = true;
+  }
+
+  document.querySelectorAll('#onboarding-overlay .onb-seg-btn').forEach(b => {
+    b.addEventListener('click', () => _onbSetRole(b.getAttribute('data-role')));
+  });
+  ['onb-hourly','onb-seniority','onb-travel','onb-commute'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.addEventListener('keydown', e => { if(e.key === 'Enter'){ e.preventDefault(); submitOnboarding(); } });
+  });
+
+  // Run once the DOM (and the a11y runtime that defines trapFocus) is ready.
+  (function initOnboarding(){
+    const run = () => { maybeShowOnboarding(); _maybeShowSampleHint(); };
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+  })();
 
   // ---- Offline support ----
   // Only meaningful when served over http(s) (e.g. GitHub Pages) — service workers can't
