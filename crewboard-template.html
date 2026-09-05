@@ -2826,6 +2826,18 @@
         return;
       }
       status.innerHTML = '<span class="spin-inline" aria-hidden="true"></span>Parsing schedule table…';
+      const scheduleWorkbook = tryParseScheduleWorkbook(wb);
+      if(scheduleWorkbook){
+        if(scheduleWorkbook.days.length === 0){
+          status.style.color = 'var(--danger)';
+          status.textContent = "Recognized this as a Schedule/Flights crew workbook, but couldn't find any usable rows in it.";
+          return;
+        }
+        status.style.display = 'none';
+        showReview(scheduleWorkbook);
+        showToast('Parsed ' + scheduleWorkbook.days.length + ' day(s) — review below');
+        return;
+      }
       const sheet = wb.Sheets[wb.SheetNames[0]];
       const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: '', raw: false});
       const isUTC = rows.some(r => r.some(c => /All times in UTC/i.test(String(c || ''))));
@@ -2963,6 +2975,247 @@
     return /[²2]/.test(mk) ? 2 : 1;
   }
 
+  // ---- "Schedule"/"Flights" crew workbook import (eCrew-style multi-sheet export) ----------
+  // A different eCrew export shape from the single-sheet "Personal Crew Schedule Report" above:
+  // a `Schedule` sheet (report-metadata rows above the real header, header row not guaranteed to
+  // be row 1) plus an optional normalized `Flights` sheet. Detected and parsed entirely separately
+  // from parseSpreadsheetRoster — if a workbook doesn't have a recognizable `Schedule` sheet header,
+  // tryParseScheduleWorkbook returns null and the caller falls through to the existing importer
+  // unchanged. `Codes & Crew` (if present) is intentionally never read here — reference/legend data,
+  // not needed by any current feature, and not worth the personal-data risk of parsing it blind.
+
+  // "18:30" or "05:45 (+1)" -> {hm, plusDays}. Returns null if the cell isn't in this display form.
+  function parseDisplayHM(str){
+    const m = /^(\d{1,2}:\d{2})\s*(?:\(\+(\d+)\))?$/.exec(String(str == null ? '' : str).trim());
+    if(!m) return null;
+    return {hm: m[1], plusDays: m[2] ? parseInt(m[2], 10) : 0};
+  }
+
+  // "05/03/2027" (the format these workbooks' own dd/mm/yyyy cell style produces via the app's
+  // existing raw:false sheet_to_json convention) -> {day, month, year, shortDate:'DD/MM', sortKey}.
+  function parseDDMMYYYY(str){
+    const m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/.exec(String(str == null ? '' : str).trim());
+    if(!m) return null;
+    const day = parseInt(m[1], 10), month = parseInt(m[2], 10), year = parseInt(m[3], 10);
+    if(month < 1 || month > 12 || day < 1 || day > 31) return null;
+    return {
+      day, month, year,
+      shortDate: String(day).padStart(2, '0') + '/' + String(month).padStart(2, '0'),
+      sortKey: year * 10000 + month * 100 + day
+    };
+  }
+
+  // Defensive fallback only: a raw Excel date serial as text (e.g. a variant export where
+  // raw:false didn't format the cell as a date). Same epoch trick as excelDurationToHours.
+  function parseExcelSerialFallback(str){
+    const n = Number(String(str == null ? '' : str).trim());
+    if(!Number.isFinite(n) || n <= 0 || n > 100000) return null;
+    const d = new Date(n * 86400000 + Date.UTC(1899, 11, 30));
+    if(isNaN(d)) return null;
+    return {
+      day: d.getUTCDate(), month: d.getUTCMonth() + 1, year: d.getUTCFullYear(),
+      shortDate: String(d.getUTCDate()).padStart(2, '0') + '/' + String(d.getUTCMonth() + 1).padStart(2, '0'),
+      sortKey: d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate()
+    };
+  }
+
+  function parseSheetDate(str){
+    return parseDDMMYYYY(str) || parseExcelSerialFallback(str);
+  }
+
+  // Scan `rows` (sheet_to_json {header:1} output) for the first row whose cells satisfy every
+  // matcher in `required` (case-insensitive, trimmed). Returns {rowIdx, cols} or null — the
+  // generic "find the real header row, wherever it is" step (row 7 in the real Schedule sheet,
+  // row 1 in Flights — never assumed).
+  function findHeaderRow(rows, matchers, required){
+    for(let i = 0; i < rows.length; i++){
+      const row = rows[i] || [];
+      const cols = {};
+      row.forEach((c, idx) => {
+        const norm = String(c == null ? '' : c).trim().toLowerCase();
+        for(const key in matchers){
+          if(cols[key] === undefined && matchers[key](norm)) cols[key] = idx;
+        }
+      });
+      if(required.every(k => cols[k] !== undefined)) return {rowIdx: i, cols};
+    }
+    return null;
+  }
+
+  const SCHEDULE_HEADER_MATCHERS = {
+    date: n => n === 'date',
+    day: n => n === 'day',
+    type: n => n === 'type',
+    code: n => n.indexOf('flight') === 0 || n === 'code' || n.indexOf('code') !== -1,
+    from: n => n === 'from',
+    to: n => n === 'to',
+    depUTC: n => n.indexOf('departure') === 0,
+    arrUTC: n => n.indexOf('arrival') === 0
+  };
+  const FLIGHTS_HEADER_MATCHERS = {
+    date: n => n === 'date',
+    flight: n => n === 'flight',
+    from: n => n === 'from',
+    to: n => n === 'to',
+    depUTC: n => n.indexOf('departure') === 0,
+    arrDate: n => n.indexOf('arrival') === 0 && n.indexOf('date') !== -1,
+    arrUTC: n => n.indexOf('arrival') === 0 && n.indexOf('date') === -1,
+    aircraft: n => n.indexOf('aircraft') === 0
+  };
+
+  // `Schedule` sheet -> day entries. Flight rows become one-leg DUTY days (superseded later by
+  // mergeScheduleAndFlights if a valid Flights sheet covers the same date); Status rows (OFF,
+  // >OFF, OFFP, or any other status/activity code the sheet contains) are preserved verbatim as
+  // their own `code`, never remapped onto an existing salary-affecting code. Rows with a blank
+  // Type (nothing reported that day) are skipped — never fabricated.
+  function parseScheduleSheetRows(rows, header, conversionFailures){
+    const days = [];
+    for(let i = header.rowIdx + 1; i < rows.length; i++){
+      const row = rows[i] || [];
+      const get = key => header.cols[key] !== undefined ? String(row[header.cols[key]] == null ? '' : row[header.cols[key]]).trim() : '';
+      const dateInfo = parseSheetDate(get('date'));
+      if(!dateInfo) continue; // blank/unreadable date row — not a data row
+      const dayName = get('day').slice(0, 3).toUpperCase();
+      const type = get('type').toLowerCase();
+      const codeCell = get('code'); // flight number OR status code text, same column in this format
+      const from = get('from'), to = get('to');
+
+      const looksLikeFlight = type === 'flight' || (!!from && !!to && /^\d+$/.test(codeCell));
+      if(looksLikeFlight && from && to && codeCell){
+        const dep = parseDisplayHM(get('depUTC')), arr = parseDisplayHM(get('arrUTC'));
+        let block = null, timeStr = null, timeBasis;
+        if(dep && arr){
+          block = computeUtcBlock(dep.hm, arr.hm, arr.plusDays > 0);
+          timeStr = dep.hm + ' – ' + arr.hm + (arr.plusDays > 0 ? '⁺¹' : '');
+          timeBasis = 'utc';
+        } else if(get('depUTC') || get('arrUTC')){
+          conversionFailures.push({leg: dateInfo.shortDate + ' ' + from + '-' + to, reason: 'Departure/Arrival UTC time not in the expected HH:MM form'});
+        }
+        days.push({
+          date: dateInfo.shortDate, day: dayName || WEEK[new Date(dateInfo.year, dateInfo.month - 1, dateInfo.day).getDay()],
+          code: 'DUTY', report: null, debrief: null,
+          legs: [{flt: codeCell, ac: '', from, to, time: timeStr, block, ...(timeBasis ? {timeBasis} : {})}],
+          _sortKey: dateInfo.sortKey
+        });
+      } else if(type !== 'flight' && codeCell && !from && !to){
+        // Not a flight row (no route) — a status/activity code. Preserved as-is: OFF/OFFP already
+        // carry their normal DUTY_CODE_MAP label; anything else (">OFF", or any future code) still
+        // imports with its own literal code and a plain label, never silently mapped onto OFF.
+        days.push({
+          date: dateInfo.shortDate, day: dayName || WEEK[new Date(dateInfo.year, dateInfo.month - 1, dateInfo.day).getDay()],
+          code: codeCell, label: DUTY_CODE_MAP[codeCell] || codeCell, _sortKey: dateInfo.sortKey
+        });
+      }
+      // else: blank Type, nothing scheduled that day — intentionally not imported.
+    }
+    return {days};
+  }
+
+  // `Flights` sheet -> legs grouped by departure date. Preferred over Schedule-derived legs
+  // (requirement: Flights is the normalized source of truth when present and valid). Arrival Date
+  // is explicit here, so the next-day case is read directly rather than inferred from a marker.
+  function parseFlightsSheetRows(rows, header, conversionFailures){
+    const legsByDate = new Map(); // shortDate -> {sortKey, year, month, day, legs:[]}
+    for(let i = header.rowIdx + 1; i < rows.length; i++){
+      const row = rows[i] || [];
+      const get = key => header.cols[key] !== undefined ? String(row[header.cols[key]] == null ? '' : row[header.cols[key]]).trim() : '';
+      const depDateInfo = parseSheetDate(get('date'));
+      if(!depDateInfo) continue;
+      const flt = get('flight'), from = get('from'), to = get('to');
+      if(!flt || !from || !to) continue; // can't build a leg without these
+
+      const dep = parseDisplayHM(get('depUTC')), arr = parseDisplayHM(get('arrUTC'));
+      const arrDateInfo = header.cols.arrDate !== undefined ? parseSheetDate(get('arrDate')) : null;
+      let block = null, timeStr = null, timeBasis;
+      if(dep && arr){
+        let crossesDay = false;
+        if(arrDateInfo && arrDateInfo.sortKey !== depDateInfo.sortKey){
+          const dayDiff = Math.round((Date.UTC(arrDateInfo.year, arrDateInfo.month - 1, arrDateInfo.day) - Date.UTC(depDateInfo.year, depDateInfo.month - 1, depDateInfo.day)) / 86400000);
+          if(dayDiff > 0) crossesDay = true;
+          else conversionFailures.push({leg: depDateInfo.shortDate + ' ' + from + '-' + to, reason: 'Arrival Date is before Departure Date — not used'});
+        }
+        block = computeUtcBlock(dep.hm, arr.hm, crossesDay);
+        timeStr = dep.hm + ' – ' + arr.hm + (crossesDay ? '⁺¹' : '');
+        timeBasis = 'utc';
+      } else if(get('depUTC') || get('arrUTC')){
+        conversionFailures.push({leg: depDateInfo.shortDate + ' ' + from + '-' + to, reason: 'Departure/Arrival UTC time not in the expected HH:MM form'});
+      }
+      const ac = header.cols.aircraft !== undefined ? get('aircraft') : '';
+      const leg = {flt, ac, from, to, time: timeStr, block, ...(timeBasis ? {timeBasis} : {})};
+
+      const key = depDateInfo.shortDate;
+      if(!legsByDate.has(key)) legsByDate.set(key, {sortKey: depDateInfo.sortKey, year: depDateInfo.year, month: depDateInfo.month, day: depDateInfo.day, legs: []});
+      legsByDate.get(key).legs.push(leg);
+    }
+    return {legsByDate};
+  }
+
+  // Flights sheet legs replace (never append to — no duplicate legs) whatever Schedule derived
+  // for the same date, since Flights is the preferred/normalized source when present and valid.
+  function mergeScheduleAndFlights(days, legsByDate){
+    const byDate = new Map(days.map(d => [d.date, d]));
+    for(const [date, info] of legsByDate){
+      const existing = byDate.get(date);
+      if(existing){
+        existing.code = 'DUTY';
+        existing.legs = info.legs;
+        existing.flatCredit = info.legs.length === 4 ? 8 : undefined;
+        delete existing.label;
+      } else {
+        days.push({
+          date, day: WEEK[new Date(info.year, info.month - 1, info.day).getDay()],
+          code: 'DUTY', report: null, debrief: null,
+          legs: info.legs, flatCredit: info.legs.length === 4 ? 8 : undefined,
+          _sortKey: info.sortKey
+        });
+      }
+    }
+    return days;
+  }
+
+  // Entry point from handleCsvUpload. Returns null (not this format — caller falls through to
+  // the existing single-sheet importer unchanged) unless a `Schedule` sheet with a recognizable
+  // header is found; otherwise returns {days, isUTC:true, conversionFailures, warnings} in the
+  // same shape parseSpreadsheetRoster's caller already expects.
+  function tryParseScheduleWorkbook(wb){
+    const scheduleName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'schedule');
+    if(!scheduleName) return null;
+    const scheduleRows = XLSX.utils.sheet_to_json(wb.Sheets[scheduleName], {header: 1, defval: '', raw: false});
+    const scheduleHeader = findHeaderRow(scheduleRows, SCHEDULE_HEADER_MATCHERS, ['date', 'day', 'code', 'from', 'to']);
+    if(!scheduleHeader) return null;
+
+    const scheduleConversionFailures = [];
+    const flightsConversionFailures = [];
+    const warnings = [];
+    let days = parseScheduleSheetRows(scheduleRows, scheduleHeader, scheduleConversionFailures).days;
+
+    const flightsName = wb.SheetNames.find(n => n.trim().toLowerCase() === 'flights');
+    let flightsLegsByDate = null;
+    if(flightsName){
+      const flightsRows = XLSX.utils.sheet_to_json(wb.Sheets[flightsName], {header: 1, defval: '', raw: false});
+      const flightsHeader = findHeaderRow(flightsRows, FLIGHTS_HEADER_MATCHERS, ['date', 'flight', 'from', 'to', 'depUTC', 'arrUTC']);
+      if(flightsHeader){
+        const flightsResult = parseFlightsSheetRows(flightsRows, flightsHeader, flightsConversionFailures);
+        flightsLegsByDate = flightsResult.legsByDate;
+        days = mergeScheduleAndFlights(days, flightsLegsByDate);
+      } else {
+        warnings.push('This file has a "Flights" sheet but its columns weren\'t recognized — flight times were taken from the Schedule sheet instead.');
+      }
+    }
+
+    // A Schedule-sourced conversion failure (e.g. a same-day round-trip condensed into one
+    // garbled row) doesn't apply once Flights sheet data has replaced that date's legs —
+    // Flights already fixed it, so don't tell the user it failed to convert.
+    const fixedDates = flightsLegsByDate ? new Set(flightsLegsByDate.keys()) : new Set();
+    const conversionFailures = scheduleConversionFailures
+      .filter(f => !fixedDates.has(String(f.leg).split(' ')[0]))
+      .concat(flightsConversionFailures);
+
+    days.sort((a, b) => (a._sortKey || 0) - (b._sortKey || 0));
+    days.forEach(d => { delete d._sortKey; });
+    return {days, isUTC: true, conversionFailures, warnings};
+  }
+
   function showReview(parsed){
     pendingParsedDays = parsed.days;
     const el = document.getElementById('review-panel');
@@ -2976,6 +3229,10 @@
       html += `<div class="help-text" style="margin-top:0; color:var(--accent-amber);">${failures.length} leg(s) could not be converted and will import with no block hours:<br>` +
         failures.map(f => `· ${f.leg} — ${f.reason}`).join('<br>') +
         `<br>You can type those block hours in by hand after applying, or add the airport to “Airport UTC Offsets” in Settings.</div>`;
+    }
+    const warnings = parsed.warnings || [];
+    if(warnings.length){
+      html += `<div class="help-text" style="margin-top:0; color:var(--accent-amber);">${warnings.join('<br>')}</div>`;
     }
     parsed.days.forEach(d => {
       if(d.code === 'DUTY'){
