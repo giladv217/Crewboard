@@ -928,7 +928,8 @@
         <button type="button" class="load-btn v-neutral" style="margin-top:8px;" onclick="closeImportChooser(); document.getElementById('pdf-input').accept='application/pdf,.pdf'; document.getElementById('pdf-input').click();">📄 PDF</button>
         <button type="button" class="load-btn v-neutral" style="margin-top:8px;" onclick="closeImportChooser(); document.getElementById('pdf-input').accept='.csv,text/csv,.xlsx,.xls'; document.getElementById('pdf-input').click();">📊 Excel / XLSX</button>
         <button type="button" class="load-btn v-neutral" style="margin-top:8px;" onclick="closeImportChooser(); switchTab('roster'); toggleEditMode && toggleEditMode(); document.getElementById('add-flight-form') && (document.getElementById('add-flight-form').style.display='block');">✏️ Manual entry</button>
-        <button type="button" class="load-btn v-neutral" style="margin-top:8px;" onclick="openCalendarPasteImport()">🗓️ eCrew calendar export <span class="mono hint" style="font-weight:400;">— paste JSON (preview)</span></button>
+        <button type="button" class="load-btn v-neutral" style="margin-top:8px;" onclick="openCalendarConnect()">🔗 eCrew Calendar Sync <span class="mono hint" style="font-weight:400;">— recommended</span></button>
+        <button type="button" id="calendar-paste-import-btn" class="load-btn v-neutral" style="margin-top:8px;" hidden onclick="openCalendarPasteImport()">🗓️ eCrew calendar export <span class="mono hint" style="font-weight:400;">— paste JSON (dev/testing)</span></button>
         <div class="help-text" style="margin-top:10px;">Screenshot the "Personal Crew Schedule Report" in eCrew/AIMS — one image, or several if it doesn't fit on one screen (overlaps are fine). Nothing is saved until you review and confirm.</div>
       </div>
       <div id="import-screenshot" hidden>
@@ -946,7 +947,7 @@
       </div>
       <div id="import-calendar" hidden>
         <button type="button" class="req-btn" style="margin-bottom:10px;" onclick="closeCalendarPasteImport()">‹ Back</button>
-        <div class="help-text" style="margin-bottom:8px;">Paste the Google Calendar <span class="mono">events.list</span> JSON for your dedicated AIMS eCrew calendar — or a bare array of event objects. Live "Connect calendar / Sync now" isn't wired yet; this previews the deterministic parser only. Separate multiple payloads with a line of <span class="mono">---</span>. Nothing is saved until you review and confirm.</div>
+        <div class="help-text" style="margin-bottom:8px;">Developer/testing path — most people should use "eCrew Calendar Sync" instead. Paste the Google Calendar <span class="mono">events.list</span> JSON for your dedicated AIMS eCrew calendar — or a bare array of event objects. Runs the same deterministic parser as the real sync, without OAuth. Separate multiple payloads with a line of <span class="mono">---</span>. Nothing is saved until you review and confirm.</div>
         <textarea id="calendar-json" rows="8" style="width:100%; box-sizing:border-box; background:var(--panel-raised, #1b2434); border:1px solid var(--divider); border-radius:8px; padding:10px; color:var(--text-primary); font-family:'IBM Plex Mono', monospace; font-size:12px;" placeholder='{ "calendarId":"…", "items":[ { "id":"evt1", "status":"confirmed", "updated":"2026-09-01T10:00:00Z", "summary":"723 TLV-BUD", "location":"TLV (1115Z-1445Z)", "description":"Reporting time : 1305\n723 - TLV (1415) - BUD (1645)\nDebriefing time : 1645\n* All times in Local Station\n--- Created by the AIMS eCrew app ---", "start":{"dateTime":"2026-09-14T13:05:00+02:00"}, "end":{"dateTime":"2026-09-14T17:45:00+02:00"} } ] }'></textarea>
         <p id="calendar-error" class="onb-error" role="alert" hidden></p>
         <button type="button" class="share-btn" id="calendar-analyze" style="margin-top:8px;" onclick="analyzeCalendarPaste()">Analyze calendar export</button>
@@ -981,6 +982,13 @@
         <button type="button" class="share-btn" id="cal-sync-confirm" onclick="confirmCalendarSyncReview()">Confirm sync</button>
         <button type="button" class="req-btn" onclick="discardCalendarSyncReview()">Cancel</button>
       </div>
+    </div>
+  </div>
+
+  <div class="crew-modal-overlay" id="cal-connect-overlay" onclick="if(event.target===this) closeCalendarConnect()">
+    <div class="crew-modal" id="cal-connect-sheet" role="dialog" aria-modal="true" aria-labelledby="cal-connect-title" tabindex="-1">
+      <h2 class="crew-modal-title" id="cal-connect-title">eCrew Calendar Sync<button type="button" class="icon-btn" onclick="closeCalendarConnect()" aria-label="Close">✕</button></h2>
+      <div id="cal-connect-body"><div class="help-text">Loading…</div></div>
     </div>
   </div>
 
@@ -4720,7 +4728,14 @@
   // EVENT-LEVEL sync: computeCalendarDiff -> review (BEFORE/AFTER) -> confirm ->
   // applyCalendarSyncDelta. Screenshot / XLSX / PDF / manual import is untouched.
   let _pendingCalendarDiff = null;
+  // C4b-5 — set only by a REAL sync (runCalendarSync) to the syncGeneration a
+  // clean confirm should persist as this device's knownGeneration. The dev
+  // paste path has no server generation to reconcile, so it is explicitly
+  // nulled below — confirmCalendarSyncReview only ever persists a generation
+  // when this is non-null AND the confirmed diff has no unresolved conflicts.
+  let _pendingCalendarGeneration = null;
   function analyzeCalendarPaste(){
+    _pendingCalendarGeneration = null;
     const err = document.getElementById('calendar-error');
     const setErr = m => { if(err){ err.textContent = m; err.hidden = false; } };
     if(err) err.hidden = true;
@@ -4804,19 +4819,400 @@
     document.getElementById('cal-sync-notes').innerHTML = '';
     document.getElementById('cal-sync-summary').textContent = '';
   }
-  function discardCalendarSyncReview(){ _pendingCalendarDiff = null; _closeCalSyncOverlay(); }
+  function discardCalendarSyncReview(){
+    // Cancelling never reconciles anything — this device's knownGeneration
+    // stays exactly where it was, even if a real sync fetched a newer one.
+    _pendingCalendarDiff = null;
+    _pendingCalendarGeneration = null;
+    _closeCalSyncOverlay();
+  }
   function confirmCalendarSyncReview(){
     const diff = _pendingCalendarDiff;
     if(!diff) return;
     const res = applyCalendarSyncDelta(diff);
-    if(!res.ok){ showToast('Sync not applied — ' + (res.error || 'unknown error')); return; }
+    if(!res.ok){
+      // Apply failed (e.g. the resulting roster failed validation) — nothing
+      // was written, so this device's knownGeneration must NOT advance either.
+      showToast('Sync not applied — ' + (res.error || 'unknown error'));
+      return;
+    }
+    // A real sync's fetched generation is only "reconciled" once a confirm has
+    // actually applied it AND no conflicts were left unresolved — a partial
+    // apply that skipped conflicts means the calendar isn't fully caught up
+    // yet, so the next sync must still re-fetch this generation's data.
+    if(_pendingCalendarGeneration != null && !diff.hasConflicts){
+      setKnownCalendarGeneration(_pendingCalendarGeneration);
+    }
     _pendingCalendarDiff = null;
+    _pendingCalendarGeneration = null;
     _closeCalSyncOverlay();
     if(typeof renderRoster === 'function'){ renderRoster(); renderCalendar(); renderNextDuty(); renderAvailableWindows(); renderFTL(); recalcSalary(); }
     const a = res.applied;
     showToast(a.add + ' added · ' + a.update + ' changed · ' + a.removedUpstream + ' removed · ' + a.reappeared + ' re-appeared'
       + (a.linked ? ' · ' + a.linked + ' linked' : '') + (a.conflictSkipped ? ' · ' + a.conflictSkipped + ' conflict(s) skipped' : ''));
+    if(document.getElementById('cal-connect-overlay') && document.getElementById('cal-connect-overlay').classList.contains('open')) refreshCalendarConnect();
   }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  C4b-5 — IN-APP GOOGLE CALENDAR SYNC UX
+  //
+  //  Real OAuth-connected front end for the C4b-2..4b-4b engine above: Connect
+  //  Google Calendar -> select calendar -> Sync now -> the SAME
+  //  getRosterImportProvider('aims-calendar') -> computeCalendarDiff ->
+  //  showCalendarSyncReview -> confirmCalendarSyncReview -> applyCalendarSyncDelta
+  //  pipeline the dev paste path already exercises. No second sync model, no
+  //  CrewBoard business rules move to the Worker — this file only adds the
+  //  connection UI and the fetch calls to /v1/calendar/*.
+  //
+  //  knownGeneration semantics (device-local, NOT the Worker's cursor): this
+  //  device's knownGeneration means "the last server sync generation THIS
+  //  DEVICE has successfully reconciled" — never "merely fetched". It only
+  //  advances after a clean confirm (see confirmCalendarSyncReview above) or
+  //  immediately after a sync that produces zero actionable changes and zero
+  //  conflicts (nothing to reconcile). Cancelling, an apply failure, or any
+  //  unresolved conflict leaves it untouched. See CAL_KNOWN_GEN_KEY below.
+  // ══════════════════════════════════════════════════════════════════════════
+
+  const CAL_KNOWN_GEN_KEY = 'crewboard-cal-known-generation';
+  function getKnownCalendarGeneration(){
+    try { const v = localStorage.getItem(CAL_KNOWN_GEN_KEY); return v == null ? null : Number(v); } catch(e){ return null; }
+  }
+  function setKnownCalendarGeneration(n){
+    try { if(n == null) localStorage.removeItem(CAL_KNOWN_GEN_KEY); else localStorage.setItem(CAL_KNOWN_GEN_KEY, String(n)); } catch(e){}
+  }
+  function clearKnownCalendarGeneration(){ setKnownCalendarGeneration(null); }
+
+  // A hidden, console-only escape hatch — see the dev/testing paste-JSON
+  // button in the import chooser. Not a user-facing setting.
+  function isCalendarDevMode(){
+    try { return localStorage.getItem('crewboard-dev-mode') === '1'; } catch(e){ return false; }
+  }
+
+  function _calEsc(s){
+    return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+  }
+  function _calFmtWhen(iso){
+    if(!iso) return 'Never';
+    const d = new Date(iso);
+    if(isNaN(d.getTime())) return 'Never';
+    return d.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  }
+  // "Tracked duties" — roster days currently carrying AIMS calendar-sync
+  // provenance (day-level or on any leg), for the CALENDAR SELECTED status
+  // card. Informational only; never used by any pay/FTL calculation.
+  function countTrackedCalendarDuties(){
+    let n = 0;
+    (rosterData || []).forEach(d => {
+      if(!d) return;
+      const daySynced = d.sync && d.sync.state === 'SYNCED' && d.sync.provider === 'AIMS_ECREW';
+      const legSynced = Array.isArray(d.legs) && d.legs.some(l => l && l.sync && l.sync.state === 'SYNCED' && l.sync.provider === 'AIMS_ECREW');
+      if(daySynced || legSynced) n++;
+    });
+    return n;
+  }
+
+  function _calOauthErrorMessage(reason){
+    const map = {
+      access_denied: 'You declined the Google permission request.',
+      no_refresh_token: 'Google did not grant offline access — try connecting again and approve access when prompted.',
+      invalid_oauth_state: 'That sign-in link expired — try connecting again.',
+      pkce_verifier_expired: 'That sign-in link expired — try connecting again.',
+    };
+    return map[reason] || 'Please try again.';
+  }
+  function _calSyncErrorMessage(status, code){
+    const map = {
+      not_connected: 'Connect your Google Calendar first.',
+      no_calendar_selected: 'Choose a calendar first.',
+      needs_reconnect: 'Google Calendar connection expired. Reconnect to continue.',
+      calendar_error: 'Something went wrong talking to Google. Try again.',
+    };
+    if(map[code]) return map[code];
+    if(status === 401) return "Your session isn't recognized here. Open CrewBoard through its normal sign-in page and try again.";
+    if(status >= 500 || /^events_list_failed_/.test(code || '')) return 'Google Calendar had a problem on its end. Try again shortly.';
+    return 'Sync failed' + (code ? ' (' + code + ')' : '') + ' — try again.';
+  }
+
+  let _calConnectStatus = null;
+
+  function openCalendarConnect(){
+    closeImportChooser();
+    if(window.openOverlayModal) openOverlayModal('cal-connect-overlay', 'cal-connect-sheet', 'eCrew Calendar Sync');
+    else document.getElementById('cal-connect-overlay').classList.add('open');
+    refreshCalendarConnect();
+  }
+  function closeCalendarConnect(){
+    if(window.closeOverlayModal) closeOverlayModal('cal-connect-overlay');
+    else document.getElementById('cal-connect-overlay').classList.remove('open');
+  }
+
+  async function refreshCalendarConnect(){
+    const body = document.getElementById('cal-connect-body');
+    if(body) body.innerHTML = '<div class="help-text">Loading…</div>';
+    const base = getBackendBase();
+    if(!base){ renderCalendarConnect({ noBackend: true }); return; }
+    let res;
+    try { res = await fetch(base + '/v1/calendar/status', { credentials: 'include' }); }
+    catch(e){ renderCalendarConnect({ networkError: true }); return; }
+    if(!res.ok){ renderCalendarConnect({ httpError: res.status }); return; }
+    let json;
+    try { json = await res.json(); } catch(e){ renderCalendarConnect({ httpError: 0 }); return; }
+    _calConnectStatus = json;
+    renderCalendarConnect(json);
+  }
+
+  // Renders states A (not connected) / B (connected, no calendar) / C
+  // (calendar selected) from the spec, plus the error/edge states below. Never
+  // hardcodes a calendar name — status.calendarName (from the Worker's own
+  // /status) is the only source, so a colleague's differently-named calendar
+  // always renders correctly.
+  function renderCalendarConnect(status){
+    status = status || {};
+    const body = document.getElementById('cal-connect-body');
+    if(!body) return;
+    if(status.noBackend){
+      body.innerHTML = '<p class="help-text">Set your CrewBoard Backend URL in Settings first.</p>';
+      return;
+    }
+    if(status.networkError){
+      body.innerHTML = '<p class="help-text">Network error — could not reach the backend. Check your connection and try again.</p>' +
+        '<button type="button" class="load-btn v-neutral" style="margin-top:8px;" onclick="refreshCalendarConnect()">Try again</button>';
+      return;
+    }
+    if(status.httpError){
+      body.innerHTML = '<p class="help-text">' + _calEsc(_calSyncErrorMessage(status.httpError, '')) + '</p>' +
+        '<button type="button" class="load-btn v-neutral" style="margin-top:8px;" onclick="refreshCalendarConnect()">Try again</button>';
+      return;
+    }
+    if(status.status === 'needs_reconnect'){
+      body.innerHTML = '<p class="help-text">Google Calendar connection expired. Reconnect to continue.</p>' +
+        '<button type="button" class="load-btn" onclick="startGoogleConnect()">Reconnect Google Calendar</button>';
+      return;
+    }
+    if(!status.connected){
+      body.innerHTML = '<p class="help-text">Connect your Google Calendar to sync your AIMS/eCrew roster.</p>' +
+        '<button type="button" class="load-btn" onclick="startGoogleConnect()">Connect Google Calendar</button>';
+      return;
+    }
+    if(!status.calendarSelected){
+      body.innerHTML = '<p class="help-text">Google connected ✓</p>' +
+        '<button type="button" class="load-btn" onclick="openCalendarPicker()">Choose calendar</button>' +
+        '<button type="button" class="req-btn" style="margin-top:8px;" onclick="disconnectCalendar(this)">Disconnect</button>';
+      return;
+    }
+    const notice = status.notice
+      ? '<div class="help-text" style="color:var(--accent-amber);margin-bottom:10px;">' + _calEsc(status.notice) + '</div>' : '';
+    body.innerHTML = notice +
+      '<p class="help-text" style="margin:0 0 2px;">eCrew Calendar</p>' +
+      '<p style="font-family:\'Space Grotesk\',sans-serif;font-weight:600;font-size:1.05rem;margin:0 0 10px;">' +
+        _calEsc(status.calendarName || status.calendarId || 'Selected calendar') + '</p>' +
+      '<p class="help-text" style="margin:0;">Last synced: <span class="mono">' + _calFmtWhen(status.lastSyncAt) + '</span></p>' +
+      '<p class="help-text" style="margin:2px 0 12px;">Tracked duties: <span class="mono">' + countTrackedCalendarDuties() + '</span></p>' +
+      '<button type="button" class="share-btn" id="cal-sync-now-btn" onclick="runCalendarSync()">Sync now</button>' +
+      '<button type="button" class="load-btn v-neutral" style="margin-top:8px;" onclick="openCalendarPicker()">Change calendar</button>' +
+      '<button type="button" class="req-btn" style="margin-top:8px;" onclick="disconnectCalendar(this)">Disconnect</button>';
+  }
+
+  async function startGoogleConnect(){
+    const base = getBackendBase();
+    if(!base){ showToast('Set your CrewBoard Backend URL in Settings first'); return; }
+    let res;
+    try { res = await fetch(base + '/v1/calendar/auth-url', { credentials: 'include' }); }
+    catch(e){ showToast('Network error — could not reach the backend.'); return; }
+    if(!res.ok){
+      let code = ''; try { code = (await res.json()).error || ''; } catch(e){}
+      showToast(code === 'google_oauth_not_configured' ? "Google Calendar isn't configured on this backend yet." : 'Could not start Google sign-in.');
+      return;
+    }
+    let json;
+    try { json = await res.json(); } catch(e){ showToast('Unexpected response from the backend.'); return; }
+    if(!json || !json.url){ showToast('Unexpected response from the backend.'); return; }
+    location.href = json.url; // full navigation to Google's consent screen
+  }
+
+  // Picker is built with real DOM nodes (never innerHTML + interpolated
+  // strings) so a calendar summary containing quotes/HTML can never be
+  // mis-parsed as markup or break out of an inline handler.
+  async function openCalendarPicker(){
+    const body = document.getElementById('cal-connect-body');
+    if(body) body.innerHTML = '<div class="help-text">Loading calendars…</div>';
+    const base = getBackendBase();
+    let res;
+    try { res = await fetch(base + '/v1/calendar/list', { credentials: 'include' }); }
+    catch(e){ renderCalendarConnect({ networkError: true }); return; }
+    if(!res.ok){ renderCalendarConnect({ httpError: res.status }); return; }
+    let json;
+    try { json = await res.json(); } catch(e){ renderCalendarConnect({ httpError: 0 }); return; }
+    _renderCalendarPickerList((json && json.calendars) || [], document.getElementById('cal-connect-body'));
+  }
+  function _renderCalendarPickerList(list, bodyEl){
+    if(!bodyEl) return;
+    bodyEl.innerHTML = '';
+    const back = document.createElement('button');
+    back.type = 'button'; back.className = 'req-btn'; back.style.marginBottom = '10px';
+    back.textContent = '‹ Back';
+    back.onclick = function(){ renderCalendarConnect(_calConnectStatus || {}); };
+    bodyEl.appendChild(back);
+    if(!list.length){
+      const p = document.createElement('p'); p.className = 'help-text';
+      p.textContent = 'No calendars found on this Google account.';
+      bodyEl.appendChild(p);
+      return;
+    }
+    const wrap = document.createElement('div'); wrap.className = 'more-list';
+    list.forEach(c => {
+      const btn = document.createElement('button');
+      btn.type = 'button'; btn.className = 'more-item';
+      const tx = document.createElement('span'); tx.className = 'more-item-tx';
+      const b = document.createElement('b'); b.textContent = c.summary || c.id; tx.appendChild(b);
+      if(c.primary){ const span = document.createElement('span'); span.textContent = 'Primary'; tx.appendChild(span); }
+      const cv = document.createElement('span'); cv.className = 'more-item-cv'; cv.setAttribute('aria-hidden', 'true'); cv.textContent = '›';
+      btn.appendChild(tx); btn.appendChild(cv);
+      btn.onclick = function(){ selectCalendarChoice(c.id, c.summary || c.id); };
+      wrap.appendChild(btn);
+    });
+    bodyEl.appendChild(wrap);
+  }
+  async function selectCalendarChoice(id, name){
+    const base = getBackendBase();
+    const body = document.getElementById('cal-connect-body');
+    if(body) body.innerHTML = '<div class="help-text">Selecting…</div>';
+    let res;
+    try {
+      res = await fetch(base + '/v1/calendar/select', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ calendarId: id, calendarName: name }),
+      });
+    } catch(e){ renderCalendarConnect({ networkError: true }); return; }
+    if(!res.ok){ renderCalendarConnect({ httpError: res.status }); return; }
+    // A new calendar relationship starts fresh for THIS device — never carry
+    // forward a reconciliation cursor from the previous calendar. The Worker
+    // independently clears its own sync_token on select, so the next sync is
+    // a bounded full read regardless; this is belt-and-suspenders on top of
+    // that, not a substitute for it.
+    clearKnownCalendarGeneration();
+    await refreshCalendarConnect();
+    showToast('Calendar selected — tap Sync now when ready');
+  }
+
+  let _calSyncInFlight = false;
+  async function runCalendarSync(){
+    if(_calSyncInFlight) return;
+    const base = getBackendBase();
+    if(!base){ showToast('Set your CrewBoard Backend URL in Settings first'); return; }
+    const btn = document.getElementById('cal-sync-now-btn');
+    _calSyncInFlight = true;
+    if(btn){ btn.disabled = true; if(!btn.dataset.label) btn.dataset.label = btn.textContent; btn.textContent = 'Syncing…'; }
+    try {
+      const known = getKnownCalendarGeneration();
+      let res;
+      try {
+        res = await fetch(base + '/v1/calendar/sync', {
+          method: 'POST', credentials: 'include',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ knownGeneration: known }),
+        });
+      } catch(e){ showToast('Network error — could not reach the backend.'); return; }
+      if(!res.ok){
+        let code = ''; try { code = (await res.json()).error || ''; } catch(e){}
+        showToast(_calSyncErrorMessage(res.status, code));
+        if(code === 'needs_reconnect' || code === 'no_calendar_selected') await refreshCalendarConnect();
+        return;
+      }
+      let body;
+      try { body = await res.json(); } catch(e){ showToast('Unexpected response from the backend.'); return; }
+      if(!body || !Array.isArray(body.events)){ showToast('Unexpected response from the backend.'); return; }
+
+      // body already has the exact {events, calendarId} shape the
+      // 'aims-calendar' provider expects from the dev paste path — no adapter.
+      const candidateGeneration = body.syncGeneration;
+      const provider = getRosterImportProvider('aims-calendar');
+      let nr;
+      try { nr = await provider(body); }
+      catch(e){ showToast("Couldn't process the calendar data — " + (e && e.message ? e.message : 'unknown error') + '.'); return; }
+
+      const foundAny = (nr.activities && nr.activities.length) || (nr.removedUpstream && nr.removedUpstream.length);
+      if(!foundAny){
+        // Genuinely zero actionable data — nothing to reconcile, so this
+        // generation is trivially "caught up". Persist immediately rather
+        // than opening an empty review.
+        setKnownCalendarGeneration(candidateGeneration);
+        await refreshCalendarConnect();
+        showToast('Calendar connected successfully, but no AIMS/eCrew roster events were found.');
+        return;
+      }
+
+      const diff = computeCalendarDiff(nr);
+      if(diff.operationalCount === 0 && !diff.hasConflicts){
+        // Everything already matches the roster (all UNCHANGED) — same
+        // zero-actionable carve-out as above.
+        setKnownCalendarGeneration(candidateGeneration);
+        await refreshCalendarConnect();
+      } else {
+        // Real changes or conflicts to review — do NOT persist yet. Only a
+        // clean confirm (see confirmCalendarSyncReview) advances this.
+        _pendingCalendarGeneration = candidateGeneration;
+      }
+      _pendingCalendarDiff = diff;
+      showCalendarSyncReview(diff);
+    } finally {
+      _calSyncInFlight = false;
+      if(btn){ btn.disabled = false; if(btn.dataset.label) btn.textContent = btn.dataset.label; }
+    }
+  }
+
+  let _calDisconnectArmedAt = 0;
+  async function disconnectCalendar(btn){
+    const now = Date.now();
+    if(now - _calDisconnectArmedAt > 4000){
+      _calDisconnectArmedAt = now;
+      if(!btn.dataset.label) btn.dataset.label = btn.textContent;
+      btn.textContent = 'Tap again to disconnect';
+      setTimeout(() => { if(Date.now() - _calDisconnectArmedAt >= 4000 && btn.dataset.label) btn.textContent = btn.dataset.label; }, 4300);
+      return;
+    }
+    _calDisconnectArmedAt = 0;
+    const base = getBackendBase();
+    let res;
+    try { res = await fetch(base + '/v1/calendar/disconnect', { method: 'POST', credentials: 'include' }); }
+    catch(e){ showToast('Network error — could not reach the backend.'); return; }
+    if(!res.ok){ showToast('Could not disconnect — try again.'); return; }
+    // Roster + calendar history are never touched here (client-side, per
+    // device, and the Worker's own disconnect() doesn't touch them either) —
+    // only this device's reconciliation cursor resets, same as a calendar
+    // change, since the next connection starts a fresh relationship.
+    clearKnownCalendarGeneration();
+    if(btn.dataset.label) btn.textContent = btn.dataset.label;
+    await refreshCalendarConnect();
+    showToast('Google Calendar disconnected.');
+  }
+
+  (function initCalendarOAuthCallback(){
+    function run(){
+      const h = location.hash || '';
+      if(h === '#calendar-connected'){
+        try { history.replaceState(null, '', location.pathname + location.search); } catch(e){ location.hash = ''; }
+        showToast('Google Calendar connected');
+        openCalendarConnect();
+      } else if(h.indexOf('#calendar-error=') === 0){
+        const reason = decodeURIComponent(h.slice('#calendar-error='.length));
+        try { history.replaceState(null, '', location.pathname + location.search); } catch(e){ location.hash = ''; }
+        showToast('Google Calendar connection failed — ' + _calOauthErrorMessage(reason));
+      }
+    }
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+  })();
+  (function revealDevCalendarPaste(){
+    function run(){
+      if(!isCalendarDevMode()) return;
+      const b = document.getElementById('calendar-paste-import-btn');
+      if(b) b.hidden = false;
+    }
+    if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
+    else run();
+  })();
 
   // Standby/paid-off/instruction credit and flight-day count are now computed live from
   // rosterData (see countCode/countFlightDays above) so loading a new PDF updates them automatically.
