@@ -51,6 +51,7 @@ vm.runInContext(
   [
     extractConst(html, "WEEK"),
     extractConst(html, "DUTY_CODE_MAP"),
+    extractFn(html, "isValidYear"),
     extractFn(html, "computeUtcBlock"),
     extractFn(html, "plusDaysFromMarker"),
     extractFn(html, "parseCrewCell"),

@@ -6,53 +6,76 @@ Built for an Israir A320 First Officer over a very long iterative session in Cla
 moving to this repo. This file exists so a fresh Claude Code session starts with the same hard-won
 context that session ended with — read it before making changes, not after something breaks.
 
-## Files
+## Files — source-of-truth architecture (post source-of-truth cleanup)
 
-- `crewboard.html` — the real, personal working file (real name, employee number, real roster
-  data, personal route-block-hour estimates). **Never commit this to a public repo or send it to
-  anyone.**
-- `crewboard-template.html` — a scrubbed, generic copy with placeholder data, meant for GitHub
-  Pages / sharing with a colleague. Must stay functionally identical to `crewboard.html` — only
-  `rosterData`, the personal constants (`HOME`/`EXCLUDED`/`EILAT_CODE`/`HOLIDAY_DATES`/
-  `AIRPORT_FLAG`/`AIRPORT_UTC_OFFSET`), the Route Block-Hour Estimates textarea, default rate
-  values, and the header/share-preview strings differ. See "Keeping the two files in sync" below.
+CrewBoard used to be maintained as two full hand-edited copies (`crewboard.html` and
+`crewboard-template.html`) that had to be kept in sync by hand. That drifted badly and
+repeatedly — most recently the entire C4b-2..4b-4b calendar-sync engine existed only in
+`crewboard.html` while the template was ~2000 lines behind. It has now been reconciled into a
+single canonical source + deterministic build:
+
+- **`crewboard-template.html` — the ONE canonical, hand-edited source of truth.** All application
+  code (HTML/CSS/JS) lives here, including every feature. It ships with generic placeholder values
+  (marked `TEMPLATE:`) at the handful of points that are genuinely personal. **Make all code edits
+  here.** It carries a `<!-- CANONICAL SOURCE -->` banner at the top as a reminder.
+- **`crewboard.html` — GENERATED, git-ignored, real/private.** Built from the canonical source by
+  injecting real values from `crewboard-data.private.json` (also git-ignored). This is the file you
+  actually open/use day to day. **Never hand-edit it** — edits will be silently lost on the next
+  build. Carries a `<!-- GENERATED -->` banner.
+- **`index.html` — GENERATED, tracked, public.** A byte-for-byte copy of the canonical source
+  (which already ships placeholder data, so no injection is needed). Serves GitHub Pages. **Never
+  hand-edit it either.**
+- **`crewboard-data.private.json` — git-ignored.** The real values for the 5 personal anchors:
+  `EXCLUDED`, `EILAT_CODE`, `HOLIDAY_DATES_BY_YEAR`, `AIRPORT_FLAG`, `AIRPORT_UTC_OFFSET`. That's
+  it — everything else that used to be "personal" (`rosterData`, the route-estimate table, the
+  hourly/per-diem/transport rate defaults) was de-personalized in an earlier pass (see "Roster/rate
+  data is runtime-only" below) and no longer lives in any HTML source at all.
+- **`scripts/build-crewboard.mjs`** — the deterministic build. `node scripts/build-crewboard.mjs`
+  builds both outputs; `--private` / `--public` build just one; `--check` verifies both are up to
+  date without writing anything (fails with a clear message if stale — this is what CI/tests use).
 - `manifest.json`, `sw.js`, `icon-192.png`, `icon-512.png`, `apple-touch-icon.png` — PWA support
   (installable, works offline once loaded over http/https at least once). Service workers don't
   register over `file://`, which is fine — a locally opened file has no server connection to lose.
 
+**Workflow**: edit `crewboard-template.html` → run `node scripts/build-crewboard.mjs` → open the
+freshly-built `crewboard.html` to try it for real → run `node --test`. `test/canonical-source.test.mjs`
+fails loudly if the canonical file goes missing/corrupt, if an output has drifted from it (someone
+hand-edited `index.html` or `crewboard.html` directly again), or if either private file leaked into
+git.
+
+## Roster/rate data is runtime-only (de-personalized, do not reintroduce)
+
+A prior pass removed ALL real roster/rate data from the HTML sources entirely — it now lives only
+in the browser's `localStorage`, entered by the user through the app's own UI:
+
+- `rosterData` seeds as `[]` in every build. CrewBoard ships with NO roster; the empty-state UI
+  ("Import your roster to get started") is intentional. Never seed a real or synthetic roster here.
+- `rate-hourly` / `rate-transport` ship `value=""` with a `placeholder` hint (never a real number —
+  a stray "0" could be mistaken for an actual rate and silently used).
+- `DEFAULT_ROUTE_BLOCK_ESTIMATES` is `{}` everywhere; the Settings "Route Block-Hour Estimates"
+  textarea ships empty. Per-pilot route estimates are entered by the user and kept in
+  `localStorage` only.
+
+Do not "fix" any of this by baking sample/real data back into the canonical source — it's
+deliberate, not an oversight.
+
 ## Before making any change
 
 1. **Read the whole file first** — don't guess at the architecture from a diff or a partial view.
-   `crewboard.html` is 2800+ lines of heavily cross-referential JS.
+   `crewboard-template.html` is 6000+ lines of heavily cross-referential JS.
 2. **This file has multiple `<script>` tags** — external `pdf.js`/`xlsx.js` (empty `src=`, no
    inline content) plus one large inline script with all the real logic. If you ever write a
    syntax-check script that assumes "the first two script blocks," it will silently check the
    *empty* external tags and skip the real one — this exact mistake shipped several turns of
-   undetected breakage once. Standard Claude Code edits (Edit tool on the real file) don't have
-   this problem, but any custom verification script should filter for non-trivial block size
+   undetected breakage once. Standard Claude Code edits (Edit tool on the canonical file) don't
+   have this problem, but any custom verification script should filter for non-trivial block size
    before trusting a "syntax OK".
 3. When removing a button/input/feature, grep for every reference to its `id` before calling it
    done — a past button merge left three dead references to a removed element that would have
    thrown on load if not caught by a full-file grep afterward.
-
-## Keeping crewboard.html and crewboard-template.html in sync
-
-This has drifted multiple times because fixes were applied to the real file only. Before treating
-the template as current, diff the function lists:
-
-```bash
-grep -oE "function [a-zA-Z_]+" crewboard.html | sort -u > /tmp/a.txt
-grep -oE "function [a-zA-Z_]+" crewboard-template.html | sort -u > /tmp/b.txt
-diff /tmp/a.txt /tmp/b.txt
-```
-
-If there's more than trivial drift, don't patch piecemeal — copy `crewboard.html` over
-`crewboard-template.html` wholesale and redo the genericization pass (header text, `rosterData`
-sample, the personal constants, clear the route-estimates textarea, zero the rate defaults,
-genericize the share-preview strings). The user has explicitly asked to keep "ISRAIR" plus the
-orange star logo in the template too — an airline name isn't personal data, don't scrub that.
-Expected/intentional drift: the Route Block-Hour Estimates textarea content itself (personal
-flying-history data, deliberately left empty in the template).
+4. After any edit, rebuild (`node scripts/build-crewboard.mjs`) and run `node --test` before
+   considering the change done — several tests extract real shipped functions straight out of
+   `crewboard-template.html` and will catch a broken anchor/shape immediately.
 
 ## Architecture overview
 

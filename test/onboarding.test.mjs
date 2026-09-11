@@ -42,8 +42,13 @@ vm.runInContext(
   [
     // top-level const/let don't attach to the vm context object -> use var
     extractConst(html, "PROFILE_FIELD").replace(/^const /, "var "),
+    extractConst(html, "IDENTITY_FIELD").replace(/^const /, "var "),
     extractConst(html, "PROFILE_VERSION").replace(/^const /, "var "),
+    extractConst(html, "CREWBOARD_AIRCRAFT").replace(/^const /, "var "),
+    extractConst(html, "INSTRUCTOR_KEY").replace(/^const /, "var "),
     extractFn(html, "profileFromStore"),
+    extractFn(html, "headerFirstName"),
+    extractFn(html, "deriveIdentityLine"),
     extractFn(html, "isProfileComplete"),
     extractFn(html, "validateOnboarding"),
     extractFn(html, "applyProfileToStore"),
@@ -51,7 +56,7 @@ vm.runInContext(
   ].join("\n"),
   sandbox
 );
-const { profileFromStore, isProfileComplete, validateOnboarding, applyProfileToStore, stripProfileKeys, PROFILE_FIELD } = sandbox;
+const { profileFromStore, headerFirstName, deriveIdentityLine, isProfileComplete, validateOnboarding, applyProfileToStore, stripProfileKeys, PROFILE_FIELD, IDENTITY_FIELD } = sandbox;
 
 // vm-sandbox objects have a foreign prototype -> compare by field, not identity.
 function sameShape(a, b) {
@@ -142,8 +147,98 @@ test("reload restores the profile (store round-trips through the view)", () => {
   const n = validateOnboarding({ role: "CAPTAIN", hourly: "512.5", seniority: "900", travel: "58", commute: "40" }).normalized;
   const p = profileFromStore(applyProfileToStore({}, n));
   sameShape(p, {
-    version: 1, role: "CAPTAIN", hourlyRate: 512.5, seniorityAddition: 900, travelReimbursement: 58, commuteMinutes: 40,
+    version: 1, role: "CAPTAIN",
+    employeeNumber: null, displayName: null, roleSource: null,
+    hourlyRate: 512.5, seniorityAddition: 900, travelReimbursement: 58, commuteMinutes: 40,
+    instructor: false,
   });
+});
+
+// ---------------------------------------------------------------- identity (Req 3/4)
+
+test("identity keys are additive — an existing profile with none is still complete", () => {
+  const p = profileFromStore(complete);
+  assert.equal(p.employeeNumber, null);
+  assert.equal(p.displayName, null);
+  assert.equal(p.roleSource, null);
+  assert.equal(isProfileComplete(complete), true); // not re-onboarded just for a missing number
+});
+
+test("profileFromStore surfaces a resolved directory identity", () => {
+  const s = { ...complete, "employee-number": "1234", "display-name": "PAT MORGAN", "role-source": "directory" };
+  const p = profileFromStore(s);
+  assert.equal(p.employeeNumber, "1234");
+  assert.equal(p.displayName, "PAT MORGAN");
+  assert.equal(p.roleSource, "directory");
+});
+
+test("roleSource only accepts 'directory' | 'manual'", () => {
+  assert.equal(profileFromStore({ "role-source": "wat" }).roleSource, null);
+  assert.equal(profileFromStore({ "role-source": "manual" }).roleSource, "manual");
+});
+
+test("stripProfileKeys also clears identity keys, roster + other settings untouched", () => {
+  const s = {
+    "pilot-role": "CAPTAIN", "rate-hourly": "650",
+    "employee-number": "1234", "display-name": "PAT MORGAN", "role-source": "directory", "directory-checked-at": "2026-05-01T00:00:00Z",
+    "home-base": "TLV", "route-estimates": "TLV-BUD: 3.4",
+  };
+  const after = stripProfileKeys(s);
+  for (const k of ["employee-number", "display-name", "role-source", "directory-checked-at"]) {
+    assert.equal(after[k], undefined, `identity key ${k} survived reset`);
+  }
+  assert.equal(after["home-base"], "TLV");
+  assert.equal(after["route-estimates"], "TLV-BUD: 3.4");
+});
+
+test("personalized header is derived at render time from displayName + role + aircraft", () => {
+  assert.equal(headerFirstName("PAT MORGAN"), "PAT");
+  assert.equal(headerFirstName("  gilad  ben tzvi "), "GILAD");
+
+  const capt = profileFromStore({ "pilot-role": "CAPTAIN", "display-name": "PAT MORGAN" });
+  assert.equal(deriveIdentityLine(capt, ""), "PAT · CAPT · A320");
+
+  const fo = profileFromStore({ "pilot-role": "FIRST_OFFICER", "display-name": "GILAD BEN TZVI" });
+  assert.equal(deriveIdentityLine(fo, "TLV"), "GILAD · FO · A320"); // home base NOT in the personalized header
+});
+
+test("no displayName -> generic identity line (unchanged fallback, base still shown)", () => {
+  assert.equal(deriveIdentityLine(profileFromStore({ "pilot-role": "FIRST_OFFICER" }), "TLV"), "ISRAIR · FO A320 · TLV");
+  assert.equal(deriveIdentityLine(profileFromStore({}), ""), "ISRAIR · A320 · YOUR BASE");
+});
+
+test("aircraft is a CrewBoard constant, never taken from a lookup response", () => {
+  // deriveIdentityLine takes only (profile, homeBase) — there is no aircraft arg
+  // to smuggle a directory value through.
+  assert.equal(deriveIdentityLine.length, 2);
+  assert.equal(sandbox.CREWBOARD_AIRCRAFT, "A320");
+  const src = extractFn(html, "applyDirectoryIdentity");
+  assert.equal(/aircraft/i.test(src), false, "applyDirectoryIdentity must not touch aircraft");
+});
+
+test("the header string is never persisted — only its inputs are", () => {
+  const applied = applyProfileToStore({ "display-name": "PAT MORGAN", "pilot-role": "CAPTAIN" }, validateOnboarding({ role: "CAPTAIN", hourly: "1" }).normalized);
+  for (const v of Object.values(applied)) {
+    assert.equal(String(v).includes(" · "), false, `stored a composed string: ${v}`);
+  }
+});
+
+test("client lookup sends only the employee number, never profile/pay data", () => {
+  const src = extractFn(html, "_runEmployeeLookup");
+  assert.match(src, /\/v1\/pilot-profile\?employeeNumber=/);
+  for (const bad of ["rate-hourly", "seniority-value", "rate-transport", "pilot-role", "displayName:", "crewboard-roster"]) {
+    assert.equal(src.includes(bad), false, `lookup references ${bad}`);
+  }
+});
+
+test("a lookup failure never blocks onboarding (only sets a message)", () => {
+  const src = extractFn(html, "_runEmployeeLookup");
+  // A network failure is caught, classified, and turned into a message via
+  // classifyLookupResponse/lookupMessage — it never throws past this function
+  // and never returns false to short-circuit the onboarding flow.
+  assert.match(src, /catch\s*\(e\)\s*\{/);
+  assert.match(src, /setMsg\(lookupMessage\(c\.kind\)/);
+  assert.equal(/return\s+false/.test(src), false);
 });
 
 test("migration: onboarding pre-fills every already-known value, needs only role", () => {
@@ -210,9 +305,11 @@ test("public template contains NO personal default values", () => {
   for (const secret of ["503.19", "58.41", 'id="rate-perdiem" value="85"']) {
     assert.equal(t.includes(secret), false, `template leaked ${secret}`);
   }
-  // profile inputs ship at neutral defaults
-  assert.match(t, /id="rate-hourly" value="0"/);
-  assert.match(t, /id="rate-transport" value="0"/);
+  // profile inputs ship at neutral defaults — rate-hourly/rate-transport ship
+  // empty with a placeholder hint (never a real "0" a pilot could mistake for
+  // an actual rate), the rest at 0
+  assert.match(t, /id="rate-hourly" value="" step="1" placeholder="/);
+  assert.match(t, /id="rate-transport" value="" step="0.01" placeholder="/);
   assert.match(t, /id="seniority-value" value="0"/);
   assert.match(t, /id="drive-time-minutes" value="0"/);
   // role select defaults to unset, no <option ... selected>

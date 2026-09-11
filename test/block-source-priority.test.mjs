@@ -11,14 +11,16 @@
 //
 //   * resolveLegBlock NEVER writes leg.block
 //   * route keys are directional ("TLV-BUD" != "BUD-TLV")
-//   * the public template ships an EMPTY DEFAULT_ROUTE_BLOCK_ESTIMATES ({}) —
-//     the private route table lives only in crewboard.html
+//   * DEFAULT_ROUTE_BLOCK_ESTIMATES ships EMPTY everywhere (template, index,
+//     and the private crewboard.html) — per-pilot route estimates are entered
+//     at runtime via the Settings "Route Block-Hour Estimates" textarea and
+//     kept only in localStorage, never baked into any HTML source
 //
 // Run:  node --test
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { readFileSync } from "node:fs";
+import { readFileSync, existsSync } from "node:fs";
 import vm from "node:vm";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -26,7 +28,10 @@ import { dirname, join } from "node:path";
 const here = dirname(fileURLToPath(import.meta.url));
 const repo = join(here, "..");
 const template = readFileSync(join(repo, "crewboard-template.html"), "utf8");
-const privateFile = readFileSync(join(repo, "crewboard.html"), "utf8");
+// crewboard.html is git-ignored and only exists once the private build has
+// been run locally — legitimately absent on a fresh clone / CI.
+const PRIVATE_PATH = join(repo, "crewboard.html");
+const privateFile = existsSync(PRIVATE_PATH) ? readFileSync(PRIVATE_PATH, "utf8") : null;
 
 function extractFn(src, name) {
   const start = src.indexOf(`function ${name}(`);
@@ -116,12 +121,10 @@ test("PUBLIC template ships an EMPTY route table (private data stays in crewboar
   assert.match(template, /<textarea id="route-estimates"[^>]*><\/textarea>/);
 });
 
-test("the private route table still exists in crewboard.html (const + Settings textarea)", () => {
-  const m = privateFile.match(/const DEFAULT_ROUTE_BLOCK_ESTIMATES = \{([\s\S]*?)\};/);
-  assert.ok(m, "DEFAULT_ROUTE_BLOCK_ESTIMATES const present");
-  const entries = (m[1].match(/"[A-Z]{3}-[A-Z]{3}":\s*\d/g) || []).length;
-  assert.ok(entries >= 40, `expected the full route table, found ${entries} entries`);
-  assert.match(privateFile, /<textarea id="route-estimates"[^>]*>\s*[A-Z]{3}-[A-Z]{3}:/);
+test("crewboard.html (if built locally) also ships an EMPTY DEFAULT_ROUTE_BLOCK_ESTIMATES — route estimates are runtime-only, never baked in", (t) => {
+  if (!privateFile) { t.skip("crewboard.html not built locally — nothing to check"); return; }
+  assert.match(privateFile, /const DEFAULT_ROUTE_BLOCK_ESTIMATES = \{\};/);
+  assert.match(privateFile, /<textarea id="route-estimates"[^>]*><\/textarea>/);
 });
 
 test("getForecastEstimates merges the textarea then the private DEFAULT table (roster/forecast view)", () => {
