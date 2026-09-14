@@ -3410,7 +3410,14 @@
         return {flt: fltMatch ? fltMatch[1] : '?', ac: '', from, to, time: timeStr, block, ...(timeBasis ? {timeBasis} : {})};
       });
 
-      const dayObj = {date: shortDate, year: parseInt(dateMatch[3], 10), day: dow, code: 'DUTY', report: reportCell || null, debrief: debriefCell || null, flatCredit: legs.length === 4 ? 8 : undefined, legs};
+      // "All times in UTC" is a document-level declaration for this whole sheet (the same kind of
+      // marker the AIMS calendar-sync text uses for "All times in Local Station") — when present,
+      // the Report column is in the SAME Zulu basis as the Actual-times column, not station-local.
+      // Tag it explicitly rather than leaving dutyReportUtcMs() to assume local-station, which
+      // otherwise double-applies a timezone conversion (real production bug — see TRIP TIME
+      // by-rotation audit). Only set when true: an isUTC=false (Local Station) sheet's REPORT stays
+      // completely unmarked, identical to every pre-existing import path.
+      const dayObj = {date: shortDate, year: parseInt(dateMatch[3], 10), day: dow, code: 'DUTY', report: reportCell || null, debrief: debriefCell || null, flatCredit: legs.length === 4 ? 8 : undefined, legs, ...(isUTC && reportCell ? {reportTimeBasis: 'utc'} : {})};
       if(crew.length) dayObj.crew = crew;
       days.push(dayObj);
     }
@@ -6002,16 +6009,28 @@
   function _dutyReportStation(d){
     return (d && Array.isArray(d.legs) && d.legs[0] && d.legs[0].from) ? String(d.legs[0].from).trim().toUpperCase() : null;
   }
-  // A duty's REPORT time -> real UTC epoch ms, local to its own departure
-  // station. Same two-tier resolution convertLocalStationLeg already uses
-  // (IANA zone first, then the Settings "Airport UTC Offsets" fallback) — no
-  // new timezone arithmetic, and never guesses when a station's zone is unknown.
+  // A duty's REPORT time -> real UTC epoch ms.
+  //
+  // REPORT carries explicit time-basis semantics via d.reportTimeBasis, the same idea as
+  // leg.timeBasis: 'utc' means d.report is already the UTC wall-clock value (used directly, no
+  // zone lookup — e.g. an "All times in UTC" spreadsheet import, where the Report column shares
+  // the same Zulu basis as the Actual-times column). Anything else — including every pre-existing
+  // roster that predates this field — is treated as station-local, exactly as before: resolved
+  // local to the duty's own departure station via the same two-tier resolution
+  // convertLocalStationLeg already uses (IANA zone first, then the Settings "Airport UTC Offsets"
+  // fallback). This default is deliberate, not a fallback of convenience — legacy data (AIMS
+  // calendar sync, Local-Station spreadsheet imports, hand-entered rosters) is genuinely
+  // station-local and must never be silently reinterpreted as UTC just because it predates this
+  // field; only an importer that KNOWS its source is UTC sets the tag.
   function dutyReportUtcMs(d){
-    const station = _dutyReportStation(d);
-    if(!station) return null;
-    const rm = /^(\d{1,2}):(\d{2})/.exec(String(d.report || ''));
+    const rm = /^(\d{1,2}):(\d{2})/.exec(String(d && d.report || ''));
     const p = _dayDateParts(d);
     if(!rm || !p) return null;
+    if(d && d.reportTimeBasis === 'utc'){
+      return Date.UTC(p.yr, p.mm - 1, p.dd, +rm[1], +rm[2]);
+    }
+    const station = _dutyReportStation(d);
+    if(!station) return null;
     const tz = AIRPORT_TZ[station];
     if(tz) return zonedWallTimeToUtcMs(p.yr, p.mm, p.dd, +rm[1], +rm[2], tz);
     const fixed = getAirportOffsets()[station];
