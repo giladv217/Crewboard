@@ -1544,6 +1544,155 @@
     return dayFlag('activity', li, 'activity day', 'Activity day ' + li + ' this month — ' + ACTIVITY_DAY_MSG);
   }
 
+  // ── Airport timezones (IATA → IANA), for "Local Station" roster imports and the LAD rule ──
+  // Public reference data — not personal. A local-station export prints each leg's
+  // times on the local wall clock of its own airport; to get real block time we
+  // must convert both ends to UTC using the zone's actual rules for that date
+  // (so daylight-saving is handled — a fixed hour offset is not). An airport not
+  // listed here falls back to the manual "Airport UTC Offsets" Settings list, and
+  // if that is also missing the leg's block stays null (never guessed).
+  //
+  // HOTFIX (post-C4b-CRST/LAD): AIRPORT_TZ / tzOffsetMinutes moved here (from their original
+  // position much later in the file, near convertLocalStationLeg) together with the whole LAD
+  // block below. computeActivityDayIndices() -> withDerivedLadDays() -> deriveLadForDay() is
+  // reached from the FIRST top-level render call (renderRoster();) as soon as the page loads —
+  // and that call happens long before this file reaches its old position. Since these are all
+  // `const`/function declarations read at call time (not just defined), leaving them physically
+  // later than their first real caller left them in the temporal dead zone, throwing
+  // "Cannot access 'NYC_AIRPORTS' before initialization" for any saved roster containing a real
+  // DUTY day — a page-breaking regression for every returning user. This relocation is a pure
+  // move, zero algorithm change: every binding a top-level render call can reach must now be
+  // initialized before that call runs. convertLocalStationLeg/zonedWallTimeToUtcMs/
+  // localLegToUtc stay in their original position — they're only ever called from user-triggered
+  // import actions, never from the eager top-level render path, so they were never at risk.
+  const AIRPORT_TZ = {
+    // Israel
+    TLV:'Asia/Jerusalem', ETM:'Asia/Jerusalem', ETH:'Asia/Jerusalem', VDA:'Asia/Jerusalem', SDV:'Asia/Jerusalem',
+    // Greece / Cyprus
+    ATH:'Europe/Athens', RHO:'Europe/Athens', HER:'Europe/Athens', JTR:'Europe/Athens', SKG:'Europe/Athens',
+    CFU:'Europe/Athens', PVK:'Europe/Athens', KGS:'Europe/Athens', JMK:'Europe/Athens', CHQ:'Europe/Athens',
+    KLX:'Europe/Athens', ZTH:'Europe/Athens', EFL:'Europe/Athens',
+    LCA:'Asia/Nicosia', PFO:'Asia/Nicosia',
+    // Balkans / Central & Eastern Europe
+    VAR:'Europe/Sofia', BOJ:'Europe/Sofia', SOF:'Europe/Sofia',
+    BUD:'Europe/Budapest', OTP:'Europe/Bucharest', KIV:'Europe/Chisinau',
+    PRG:'Europe/Prague', VNO:'Europe/Vilnius', RIX:'Europe/Riga', TLL:'Europe/Tallinn', WAW:'Europe/Warsaw',
+    LJU:'Europe/Ljubljana', ZAG:'Europe/Zagreb', SPU:'Europe/Zagreb', DBV:'Europe/Zagreb',
+    SJJ:'Europe/Sarajevo', TIV:'Europe/Podgorica', TGD:'Europe/Podgorica', BEG:'Europe/Belgrade',
+    SKP:'Europe/Skopje', TIA:'Europe/Tirane', OHD:'Europe/Skopje',
+    // Western Europe
+    BER:'Europe/Berlin', MUC:'Europe/Berlin', FRA:'Europe/Berlin', DUS:'Europe/Berlin', HAM:'Europe/Berlin',
+    VIE:'Europe/Vienna', SZG:'Europe/Vienna', INN:'Europe/Vienna',
+    ZRH:'Europe/Zurich', GVA:'Europe/Zurich', BSL:'Europe/Zurich',
+    FCO:'Europe/Rome', CIA:'Europe/Rome', NAP:'Europe/Rome', VRN:'Europe/Rome', VCE:'Europe/Rome',
+    CTA:'Europe/Rome', MXP:'Europe/Rome', BLQ:'Europe/Rome', BRI:'Europe/Rome', PMO:'Europe/Rome',
+    AGP:'Europe/Madrid', BCN:'Europe/Madrid', MAD:'Europe/Madrid', ALC:'Europe/Madrid', PMI:'Europe/Madrid',
+    CDG:'Europe/Paris', ORY:'Europe/Paris', NCE:'Europe/Paris', LYS:'Europe/Paris', MRS:'Europe/Paris',
+    AMS:'Europe/Amsterdam', BRU:'Europe/Brussels', LUX:'Europe/Luxembourg',
+    LHR:'Europe/London', LGW:'Europe/London', STN:'Europe/London', LTN:'Europe/London', MAN:'Europe/London',
+    LIS:'Europe/Lisbon', OPO:'Europe/Lisbon',
+    // Turkey / Caucasus / Middle East
+    IST:'Europe/Istanbul', SAW:'Europe/Istanbul', AYT:'Europe/Istanbul', ESB:'Europe/Istanbul', ADB:'Europe/Istanbul',
+    GYD:'Asia/Baku', TBS:'Asia/Tbilisi', BUS:'Asia/Tbilisi', EVN:'Asia/Yerevan',
+    AMM:'Asia/Amman', DXB:'Asia/Dubai', AUH:'Asia/Dubai', RAK:'Africa/Casablanca',
+    // Africa
+    ZNZ:'Africa/Dar_es_Salaam', JRO:'Africa/Dar_es_Salaam', CAI:'Africa/Cairo', SSH:'Africa/Cairo',
+    HRG:'Africa/Cairo', ADD:'Africa/Addis_Ababa', NBO:'Africa/Nairobi',
+    // North America
+    JFK:'America/New_York', EWR:'America/New_York', BOS:'America/New_York', IAD:'America/New_York',
+    MIA:'America/New_York', FLL:'America/New_York', ORD:'America/Chicago', LAX:'America/Los_Angeles',
+    YYZ:'America/Toronto', YUL:'America/Toronto'
+  };
+
+  // Real UTC offset (minutes, east-of-UTC positive) of an IANA zone at a UTC instant.
+  function tzOffsetMinutes(utcMs, timeZone){
+    try {
+      const dtf = new Intl.DateTimeFormat('en-US', {
+        timeZone, hourCycle: 'h23',
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      const p = {};
+      for(const part of dtf.formatToParts(new Date(utcMs))){ p[part.type] = part.value; }
+      const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, (+p.hour) % 24, +p.minute, +p.second);
+      return Math.round((asUTC - utcMs) / 60000);
+    } catch(e){ return null; } // unknown/invalid zone
+  }
+
+  // ══════════════════════════════════════════════════════════════════════════
+  //  LAD — Late Arrival Day (contractual additional Activity Day)
+  //
+  //  Rule: a flight whose origin belongs to the New York airport group and whose destination is
+  //  TLV, landing strictly AFTER 08:00 local Tel Aviv time, earns one additional contractual
+  //  Activity Day on the CALENDAR DATE of arrival. 08:00 exactly does NOT qualify. It is not a
+  //  flight (no leg/report/debrief/block of its own) and is never persisted into rosterData —
+  //  it is derived fresh from the flight day on every read via withDerivedLadDays(), which is
+  //  the ONLY function every consumer (Roster, Calendar, Share, Activity Count) calls. There must
+  //  never be a second implementation of the >08:00 / New-York / TLV check anywhere else.
+  //
+  //  New York is an explicit, maintainable airport GROUP — never matched on display text like
+  //  "New York". Today's roster data only ever produces JFK; EWR is listed as the same
+  //  contractual group so a future roster using it needs no rule change, only a set update.
+  // ══════════════════════════════════════════════════════════════════════════
+  const NYC_AIRPORTS = new Set(['JFK', 'EWR']); // the New York contractual airport group — extend here, never by matching display text
+  const LAD_TLV_LOCAL_CUTOFF_MIN = 8 * 60; // 08:00 — strictly AFTER this qualifies; exactly 08:00 does not
+
+  // The reverse of zonedWallTimeToUtcMs (below, near convertLocalStationLeg): a UTC instant ->
+  // that IANA zone's wall-clock date/time, built on the same tzOffsetMinutes primitive. Used
+  // ONLY by the LAD rule — every other time conversion in the app goes the other direction
+  // (wall -> UTC).
+  function utcToZonedWallTime(utcMs, timeZone){
+    const off = tzOffsetMinutes(utcMs, timeZone);
+    if(off == null) return null;
+    const d = new Date(utcMs + off * 60000);
+    return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), hh: d.getUTCHours(), mm: d.getUTCMinutes() };
+  }
+
+  // One DUTY day -> its LAD entry, or null. Reads the leg's already-computed UTC time
+  // (leg.time / leg.timeBasis==='utc') — the SAME canonical, engine-trusted representation every
+  // other business rule uses (leg.localTime, where present, is a display-only overlay and is
+  // deliberately NOT read here) — so this introduces no second time-conversion path.
+  function deriveLadForDay(d){
+    if(!d || d.code !== 'DUTY' || !d.legs || !d.legs.length) return null;
+    const leg = d.legs[d.legs.length - 1];
+    if(!leg || leg.to !== 'TLV' || !NYC_AIRPORTS.has(leg.from)) return null;
+    if(leg.timeBasis !== 'utc' || !leg.time) return null; // no reliable UTC time -> never guess
+    const m = /(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})(⁺[¹²]|\+[12])?\s*$/.exec(String(leg.time).trim());
+    if(!m) return null;
+    if(!/^\d{2}\/\d{2}$/.test(d.date || '')) return null;
+    const year = dayYear(d);
+    const depDay = parseInt(d.date.slice(0, 2), 10), depMonth = parseInt(d.date.slice(3), 10);
+    const [ah, am] = m[2].split(':').map(Number);
+    const dayOffset = m[3] ? (/[²2]/.test(m[3]) ? 2 : 1) : 0;
+    const arrUtcMs = Date.UTC(year, depMonth - 1, depDay + dayOffset, ah, am);
+    const wall = utcToZonedWallTime(arrUtcMs, AIRPORT_TZ.TLV);
+    if(!wall) return null;
+    if(wall.hh * 60 + wall.mm <= LAD_TLV_LOCAL_CUTOFF_MIN) return null; // 08:00 exactly does not qualify
+    const arrDow = WEEK[new Date(Date.UTC(wall.y, wall.mo - 1, wall.d)).getUTCDay()];
+    return {
+      date: String(wall.d).padStart(2, '0') + '/' + String(wall.mo).padStart(2, '0'),
+      year: wall.y, day: arrDow, code: 'LAD', label: 'Late Arrival Day',
+      linkedDate: d.date, linkedFlightNumber: leg.flt || undefined,
+    };
+  }
+
+  // `days` (any chronological day-array — live rosterData, an uploaded actual-times file, or a
+  // What-If copy) with each triggering flight's LAD entry inserted immediately after it. Never
+  // mutates or persists — a pure read-time view. Inserting right after the flight preserves
+  // chronological order (a LAD's date is always its flight's date + 1-2 calendar days, and
+  // rosterData is already chronological), which callers that render a grid (Calendar/Share) rely
+  // on as much as the ones that just count.
+  function withDerivedLadDays(days){
+    days = days || rosterData;
+    const out = [];
+    days.forEach(d => {
+      out.push(d);
+      const lad = deriveLadForDay(d);
+      if(lad) out.push(lad);
+    });
+    return out;
+  }
+
   function computeActivityDayIndices(days){
     // Activity-day set (C3.3): DUTY + LAYOVER + INS + SIM + LAD — each counts once per
     // calendar date, in order. Standby and paid-off days do NOT count. Neither does CRST
@@ -2995,67 +3144,6 @@
     return (arrMin - depMin) / 60;
   }
 
-  // ── Airport timezones (IATA → IANA), for "Local Station" roster imports ──────
-  // Public reference data — not personal. A local-station export prints each leg's
-  // times on the local wall clock of its own airport; to get real block time we
-  // must convert both ends to UTC using the zone's actual rules for that date
-  // (so daylight-saving is handled — a fixed hour offset is not). An airport not
-  // listed here falls back to the manual "Airport UTC Offsets" Settings list, and
-  // if that is also missing the leg's block stays null (never guessed).
-  const AIRPORT_TZ = {
-    // Israel
-    TLV:'Asia/Jerusalem', ETM:'Asia/Jerusalem', ETH:'Asia/Jerusalem', VDA:'Asia/Jerusalem', SDV:'Asia/Jerusalem',
-    // Greece / Cyprus
-    ATH:'Europe/Athens', RHO:'Europe/Athens', HER:'Europe/Athens', JTR:'Europe/Athens', SKG:'Europe/Athens',
-    CFU:'Europe/Athens', PVK:'Europe/Athens', KGS:'Europe/Athens', JMK:'Europe/Athens', CHQ:'Europe/Athens',
-    KLX:'Europe/Athens', ZTH:'Europe/Athens', EFL:'Europe/Athens',
-    LCA:'Asia/Nicosia', PFO:'Asia/Nicosia',
-    // Balkans / Central & Eastern Europe
-    VAR:'Europe/Sofia', BOJ:'Europe/Sofia', SOF:'Europe/Sofia',
-    BUD:'Europe/Budapest', OTP:'Europe/Bucharest', KIV:'Europe/Chisinau',
-    PRG:'Europe/Prague', VNO:'Europe/Vilnius', RIX:'Europe/Riga', TLL:'Europe/Tallinn', WAW:'Europe/Warsaw',
-    LJU:'Europe/Ljubljana', ZAG:'Europe/Zagreb', SPU:'Europe/Zagreb', DBV:'Europe/Zagreb',
-    SJJ:'Europe/Sarajevo', TIV:'Europe/Podgorica', TGD:'Europe/Podgorica', BEG:'Europe/Belgrade',
-    SKP:'Europe/Skopje', TIA:'Europe/Tirane', OHD:'Europe/Skopje',
-    // Western Europe
-    BER:'Europe/Berlin', MUC:'Europe/Berlin', FRA:'Europe/Berlin', DUS:'Europe/Berlin', HAM:'Europe/Berlin',
-    VIE:'Europe/Vienna', SZG:'Europe/Vienna', INN:'Europe/Vienna',
-    ZRH:'Europe/Zurich', GVA:'Europe/Zurich', BSL:'Europe/Zurich',
-    FCO:'Europe/Rome', CIA:'Europe/Rome', NAP:'Europe/Rome', VRN:'Europe/Rome', VCE:'Europe/Rome',
-    CTA:'Europe/Rome', MXP:'Europe/Rome', BLQ:'Europe/Rome', BRI:'Europe/Rome', PMO:'Europe/Rome',
-    AGP:'Europe/Madrid', BCN:'Europe/Madrid', MAD:'Europe/Madrid', ALC:'Europe/Madrid', PMI:'Europe/Madrid',
-    CDG:'Europe/Paris', ORY:'Europe/Paris', NCE:'Europe/Paris', LYS:'Europe/Paris', MRS:'Europe/Paris',
-    AMS:'Europe/Amsterdam', BRU:'Europe/Brussels', LUX:'Europe/Luxembourg',
-    LHR:'Europe/London', LGW:'Europe/London', STN:'Europe/London', LTN:'Europe/London', MAN:'Europe/London',
-    LIS:'Europe/Lisbon', OPO:'Europe/Lisbon',
-    // Turkey / Caucasus / Middle East
-    IST:'Europe/Istanbul', SAW:'Europe/Istanbul', AYT:'Europe/Istanbul', ESB:'Europe/Istanbul', ADB:'Europe/Istanbul',
-    GYD:'Asia/Baku', TBS:'Asia/Tbilisi', BUS:'Asia/Tbilisi', EVN:'Asia/Yerevan',
-    AMM:'Asia/Amman', DXB:'Asia/Dubai', AUH:'Asia/Dubai', RAK:'Africa/Casablanca',
-    // Africa
-    ZNZ:'Africa/Dar_es_Salaam', JRO:'Africa/Dar_es_Salaam', CAI:'Africa/Cairo', SSH:'Africa/Cairo',
-    HRG:'Africa/Cairo', ADD:'Africa/Addis_Ababa', NBO:'Africa/Nairobi',
-    // North America
-    JFK:'America/New_York', EWR:'America/New_York', BOS:'America/New_York', IAD:'America/New_York',
-    MIA:'America/New_York', FLL:'America/New_York', ORD:'America/Chicago', LAX:'America/Los_Angeles',
-    YYZ:'America/Toronto', YUL:'America/Toronto'
-  };
-
-  // Real UTC offset (minutes, east-of-UTC positive) of an IANA zone at a UTC instant.
-  function tzOffsetMinutes(utcMs, timeZone){
-    try {
-      const dtf = new Intl.DateTimeFormat('en-US', {
-        timeZone, hourCycle: 'h23',
-        year: 'numeric', month: '2-digit', day: '2-digit',
-        hour: '2-digit', minute: '2-digit', second: '2-digit'
-      });
-      const p = {};
-      for(const part of dtf.formatToParts(new Date(utcMs))){ p[part.type] = part.value; }
-      const asUTC = Date.UTC(+p.year, +p.month - 1, +p.day, (+p.hour) % 24, +p.minute, +p.second);
-      return Math.round((asUTC - utcMs) / 60000);
-    } catch(e){ return null; } // unknown/invalid zone
-  }
-
   // A wall-clock date+time in a given IANA zone → real UTC epoch ms.
   // Refines the offset at the candidate instant so a DST changeover is resolved correctly.
   function zonedWallTimeToUtcMs(y, mo, d, hh, mm, timeZone){
@@ -3125,79 +3213,6 @@
     // arrUTC < depUTC check below is the correct and sufficient day-rollover signal here.
     if(arrUTC < depUTC) arrUTC += 1440;
     return {block: (arrUTC - depUTC) / 60, time: minutesToTimeStr(depUTC) + ' – ' + minutesToTimeStr(arrUTC)};
-  }
-
-  // ══════════════════════════════════════════════════════════════════════════
-  //  LAD — Late Arrival Day (contractual additional Activity Day)
-  //
-  //  Rule: a flight whose origin belongs to the New York airport group and whose destination is
-  //  TLV, landing strictly AFTER 08:00 local Tel Aviv time, earns one additional contractual
-  //  Activity Day on the CALENDAR DATE of arrival. 08:00 exactly does NOT qualify. It is not a
-  //  flight (no leg/report/debrief/block of its own) and is never persisted into rosterData —
-  //  it is derived fresh from the flight day on every read via withDerivedLadDays(), which is
-  //  the ONLY function every consumer (Roster, Calendar, Share, Activity Count) calls. There must
-  //  never be a second implementation of the >08:00 / New-York / TLV check anywhere else.
-  //
-  //  New York is an explicit, maintainable airport GROUP — never matched on display text like
-  //  "New York". Today's roster data only ever produces JFK; EWR is listed as the same
-  //  contractual group so a future roster using it needs no rule change, only a set update.
-  // ══════════════════════════════════════════════════════════════════════════
-  const NYC_AIRPORTS = new Set(['JFK', 'EWR']); // the New York contractual airport group — extend here, never by matching display text
-  const LAD_TLV_LOCAL_CUTOFF_MIN = 8 * 60; // 08:00 — strictly AFTER this qualifies; exactly 08:00 does not
-
-  // The reverse of zonedWallTimeToUtcMs (above): a UTC instant -> that IANA zone's wall-clock
-  // date/time, built on the same tzOffsetMinutes primitive. Used ONLY by the LAD rule — every
-  // other time conversion in the app already goes the other direction (wall -> UTC).
-  function utcToZonedWallTime(utcMs, timeZone){
-    const off = tzOffsetMinutes(utcMs, timeZone);
-    if(off == null) return null;
-    const d = new Date(utcMs + off * 60000);
-    return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), hh: d.getUTCHours(), mm: d.getUTCMinutes() };
-  }
-
-  // One DUTY day -> its LAD entry, or null. Reads the leg's already-computed UTC time
-  // (leg.time / leg.timeBasis==='utc') — the SAME canonical, engine-trusted representation every
-  // other business rule uses (leg.localTime, where present, is a display-only overlay and is
-  // deliberately NOT read here) — so this introduces no second time-conversion path.
-  function deriveLadForDay(d){
-    if(!d || d.code !== 'DUTY' || !d.legs || !d.legs.length) return null;
-    const leg = d.legs[d.legs.length - 1];
-    if(!leg || leg.to !== 'TLV' || !NYC_AIRPORTS.has(leg.from)) return null;
-    if(leg.timeBasis !== 'utc' || !leg.time) return null; // no reliable UTC time -> never guess
-    const m = /(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})(⁺[¹²]|\+[12])?\s*$/.exec(String(leg.time).trim());
-    if(!m) return null;
-    if(!/^\d{2}\/\d{2}$/.test(d.date || '')) return null;
-    const year = dayYear(d);
-    const depDay = parseInt(d.date.slice(0, 2), 10), depMonth = parseInt(d.date.slice(3), 10);
-    const [ah, am] = m[2].split(':').map(Number);
-    const dayOffset = m[3] ? (/[²2]/.test(m[3]) ? 2 : 1) : 0;
-    const arrUtcMs = Date.UTC(year, depMonth - 1, depDay + dayOffset, ah, am);
-    const wall = utcToZonedWallTime(arrUtcMs, AIRPORT_TZ.TLV);
-    if(!wall) return null;
-    if(wall.hh * 60 + wall.mm <= LAD_TLV_LOCAL_CUTOFF_MIN) return null; // 08:00 exactly does not qualify
-    const arrDow = WEEK[new Date(Date.UTC(wall.y, wall.mo - 1, wall.d)).getUTCDay()];
-    return {
-      date: String(wall.d).padStart(2, '0') + '/' + String(wall.mo).padStart(2, '0'),
-      year: wall.y, day: arrDow, code: 'LAD', label: 'Late Arrival Day',
-      linkedDate: d.date, linkedFlightNumber: leg.flt || undefined,
-    };
-  }
-
-  // `days` (any chronological day-array — live rosterData, an uploaded actual-times file, or a
-  // What-If copy) with each triggering flight's LAD entry inserted immediately after it. Never
-  // mutates or persists — a pure read-time view. Inserting right after the flight preserves
-  // chronological order (a LAD's date is always its flight's date + 1-2 calendar days, and
-  // rosterData is already chronological), which callers that render a grid (Calendar/Share) rely
-  // on as much as the ones that just count.
-  function withDerivedLadDays(days){
-    days = days || rosterData;
-    const out = [];
-    days.forEach(d => {
-      out.push(d);
-      const lad = deriveLadForDay(d);
-      if(lad) out.push(lad);
-    });
-    return out;
   }
 
   async function handleCsvUpload(e){
