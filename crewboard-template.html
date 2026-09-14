@@ -566,10 +566,10 @@
         </div>
       </div>
 
-      <div class="field-group">
-        <label>Layover Credit (h, manual — see roster for layovers)</label>
-        <div class="input-wrap"><input type="number" id="layover-hours" value="" step="0.1" placeholder="0"></div>
+      <div class="breakdown" style="margin-top:8px;">
+        <div class="brk-row"><span>Trip Time <span class="mono hint">(3h credit / 24h qualifying non-block time)</span></span><span class="val" id="brk-trip-time">0:00</span></div>
       </div>
+      <div class="mono hint" id="trip-time-incomplete-notice" style="margin:-4px 0 6px; color:var(--accent-amber);" hidden></div>
       <div class="breakdown" style="margin-top:0;">
         <div class="brk-row"><span>Total credit hours</span><span class="val" id="brk-credit-total">0.00h</span></div>
       </div>
@@ -583,7 +583,7 @@
         <div class="brk-row"><span>Per diem in ₪ (× fx rate)</span><span class="val" id="brk-perdiem-ils">₪0</span></div>
         <div class="brk-row"><span>Total income</span><span class="val" id="brk-total-income">₪0</span></div>
       </div>
-      <div class="help-text">Two currencies, shown separately — your credit pay is in shekels, per diem in dollars, so they're not added together. Standby/paid-off/instruction credit and flight-day count update automatically from whatever roster is loaded; layover stays a manual field since it needs cross-checking against consecutive duty days.</div>
+      <div class="help-text">Two currencies, shown separately — your credit pay is in shekels, per diem in dollars, so they're not added together. Standby/paid-off/instruction credit, flight-day count, and Trip Time all update automatically from whatever roster is loaded.</div>
 
       <button type="button" class="load-btn v-neutral" style="margin-top:6px;" onclick="window.print()">Print / Save as PDF</button>
 
@@ -5957,6 +5957,155 @@
     };
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  TRIP TIME — ONE unified contractual compensation concept (replaces the old
+  //  manual "Layover Credit" input). Rate: 3.0 credit hours per 24:00 of
+  //  qualifying non-BLOCK time (== qualifying hours / 8).
+  //
+  //  For a whole trip/rotation, qualifying non-BLOCK time is ONE elapsed span:
+  //    (final ON BLOCK of the rotation) - (initial REPORT of the rotation) - (sum
+  //    of every leg's BLOCK time inside that span).
+  //  This single span deliberately covers a same-day quickie (a rotation that is
+  //  just one duty day, first leg home -> last leg home), a normal overnight/
+  //  multi-day layover (a rotation of 2+ duty days linked through the away
+  //  station), and any longer multi-leg rotation, uniformly — there is no
+  //  separate "layover" term added on top of the flight-day ground time: ON
+  //  BLOCK -> next REPORT is already entirely inside the span between the very
+  //  first report and the very final on-block, so adding it again would double-
+  //  count it. Positioning/deadhead legs use the same principle: their BLOCK is
+  //  BLOCK time like any operating leg's for THIS subtraction only — this does
+  //  NOT touch the existing Operating-vs-Deadhead distinction used elsewhere
+  //  (Daily Minimum, multipliers, FTL), which stays exactly as it was.
+  //
+  //  This is NOT computeTripTimeHours()/tripTimeTotal above (a different,
+  //  protected mechanism: the per-duty-day BT+TT-vs-minimum Completion top-up,
+  //  and the Fanfare ACTUAL "Trip Time" figure sourced from the imported
+  //  payroll workbook) — both stay untouched. This block is the ONE
+  //  authoritative engine for the TRIP TIME CREDIT bucket that feeds
+  //  totalCreditHours (live Salary tab) and the Fanfare PREDICTED "Trip Time"
+  //  column specifically (see recalcSalary() and renderReconComparison()).
+  // ══════════════════════════════════════════════════════════════════════════
+  const TRIP_TIME_CREDIT_PER_HOUR = 1 / 8; // 3.0 credit hours per 24:00 qualifying == /8
+
+  // The station a duty's REPORT time is local to: wherever ITS OWN first leg
+  // departs from (home for a rotation's first duty; the away station for a
+  // continuing duty after a layover) — generalizes the tested NY-only
+  // convention (nyLayoverSpans / compensation-c32.test.js) to any station.
+  function _dutyReportStation(d){
+    return (d && Array.isArray(d.legs) && d.legs[0] && d.legs[0].from) ? String(d.legs[0].from).trim().toUpperCase() : null;
+  }
+  // A duty's REPORT time -> real UTC epoch ms, local to its own departure
+  // station. Same two-tier resolution convertLocalStationLeg already uses
+  // (IANA zone first, then the Settings "Airport UTC Offsets" fallback) — no
+  // new timezone arithmetic, and never guesses when a station's zone is unknown.
+  function dutyReportUtcMs(d){
+    const station = _dutyReportStation(d);
+    if(!station) return null;
+    const rm = /^(\d{1,2}):(\d{2})/.exec(String(d.report || ''));
+    const p = _dayDateParts(d);
+    if(!rm || !p) return null;
+    const tz = AIRPORT_TZ[station];
+    if(tz) return zonedWallTimeToUtcMs(p.yr, p.mm, p.dd, +rm[1], +rm[2], tz);
+    const fixed = getAirportOffsets()[station];
+    if(fixed == null) return null; // unknown station timezone -> never guess
+    return Date.UTC(p.yr, p.mm - 1, p.dd, +rm[1], +rm[2]) - fixed * 3600000;
+  }
+  // A leg's ON BLOCK (arrival) -> real UTC epoch ms. Prefers a cached actual
+  // flight-status arrival over the scheduled leg.time-derived value — the same
+  // actual-over-scheduled precedence nyLayoverSpans already uses.
+  function legOnBlockUtcMs(d, leg){
+    const fs = leg && leg.flightStatus;
+    const actual = (fs && fs.arrival && fs.arrival.actual) ? Date.parse(fs.arrival.actual) : NaN;
+    if(!isNaN(actual)) return actual;
+    return legArrUtcMs(d, leg);
+  }
+
+  // Groups rosterData's DUTY days into trip/rotations: a rotation starts at a
+  // duty whose FIRST leg departs home, and keeps extending — through however
+  // many linked duties/layovers — as long as the NEXT duty (by roster order,
+  // skipping any non-DUTY days such as an explicit LAYOVER placeholder, OFF, or
+  // a cancelled/reassigned CXL day in between) departs from EXACTLY the city
+  // the previous duty's last leg arrived at. This reuses the same link test
+  // detectImplicitLayoverGaps() already uses (generalized from "any gap" to
+  // "any continuation"), never joining two duties merely because their dates
+  // are adjacent. A rotation ends the moment some duty's last leg returns
+  // home. Deliberately conservative: a duty that doesn't begin at home and has
+  // no linking predecessor among the still-unconsumed duties is excluded
+  // entirely, never guessed into a rotation; an open rotation with no
+  // continuation found in the visible data is returned with complete:false
+  // rather than fabricated.
+  //
+  // Cancellation/reassignment (confirmed rule): a CXL day has no legs, so the
+  // "next duty" search transparently skips over it and lands on whichever
+  // duty the crew actually used to depart the layover — the layover is never
+  // cut short at a cancelled flight's report time, because that report time
+  // is never read at all for a day that isn't code 'DUTY'.
+  function tripTimeRotations(days, maxDateObj){
+    days = days || rosterData;
+    const home = getHomeBase();
+    const duties = [];
+    days.forEach(d => { if(d && d.code === 'DUTY' && Array.isArray(d.legs) && d.legs.length) duties.push(d); });
+    const rotations = [];
+    const consumed = new Set();
+    for(let i = 0; i < duties.length; i++){
+      if(consumed.has(i)) continue;
+      const first = duties[i];
+      if(_dutyReportStation(first) !== home) continue; // not a rotation start — never guessed
+      if(!_withinRange(first, maxDateObj)) continue;
+      let legs = [];
+      let cur = first, curIdx = i, complete = false;
+      while(true){
+        consumed.add(curIdx);
+        legs = legs.concat(cur.legs);
+        const lastCity = String(cur.legs[cur.legs.length - 1].to || '').trim().toUpperCase();
+        if(lastCity === home){ complete = true; break; }
+        let foundIdx = -1;
+        for(let j = curIdx + 1; j < duties.length; j++){
+          if(consumed.has(j)) continue;
+          if(_dutyReportStation(duties[j]) === lastCity){ foundIdx = j; break; }
+        }
+        if(foundIdx === -1) break; // open-ended — no continuation in the visible data
+        curIdx = foundIdx; cur = duties[foundIdx];
+      }
+      rotations.push({ startDay: first, endDay: cur, legs, complete });
+    }
+    return rotations;
+  }
+
+  // THE authoritative TRIP TIME credit-hours calculation. Never fabricates a
+  // number for a rotation missing its REPORT, its final ON BLOCK, or any leg's
+  // BLOCK time — those contribute to incompleteCount instead, so the UI can
+  // say "N segment(s) missing required timing data" rather than silently
+  // understate (or invent) the figure.
+  function computeTripTimeCredit(days, maxDateObj){
+    const rotations = tripTimeRotations(days, maxDateObj);
+    const estimates = getForecastEstimates();
+    let creditHours = 0, incompleteCount = 0;
+    const rows = [];
+    rotations.forEach(r => {
+      if(!r.complete){ incompleteCount++; return; }
+      const reportMs = dutyReportUtcMs(r.startDay);
+      if(reportMs == null){ incompleteCount++; return; }
+      const lastLeg = r.legs[r.legs.length - 1];
+      const onBlockMs = legOnBlockUtcMs(r.endDay, lastLeg);
+      if(onBlockMs == null){ incompleteCount++; return; }
+      let totalBlock = 0, blockOk = true;
+      for(const l of r.legs){
+        const resolved = resolveLegBlock(l, estimates, { flightStatus: l.flightStatus });
+        if(resolved.block == null){ blockOk = false; break; }
+        totalBlock += resolved.block;
+      }
+      if(!blockOk){ incompleteCount++; return; }
+      const elapsedHours = (onBlockMs - reportMs) / 3600000;
+      const qualifying = elapsedHours - totalBlock;
+      if(qualifying <= 0) return; // block >= elapsed span — nothing owed, not a data error worth flagging
+      const hrs = qualifying * TRIP_TIME_CREDIT_PER_HOUR;
+      creditHours += hrs;
+      rows.push({ startDate: r.startDay.date, endDate: r.endDay.date, qualifyingHours: qualifying, creditHours: hrs });
+    });
+    return { creditHours, incompleteCount, rotationCount: rotations.length, rows };
+  }
+
   function calcCreditBreakdown(){
     return computeCreditCore(rosterData, {
       getUnsched: (d, l, i, j) => {
@@ -5969,13 +6118,18 @@
 
   function computeIncomeForDataset(days, maxDateObj, getUnsched, overrides){
     // Mirrors recalcSalary's income formula, but for an arbitrary dataset (the live roster or
-    // an uploaded actual-times file) and optionally capped to a coverage date. Layover credit
-    // and the manual Ground Activity fields are excluded — they're single period-wide numbers,
-    // not date-stamped, so they can't be fairly split for a partial-period comparison.
+    // an uploaded actual-times file) and optionally capped to a coverage date. The manual Ground
+    // Activity fields are excluded — a single period-wide number, not date-stamped, so it can't
+    // be fairly split for a partial-period comparison. TRIP TIME (unlike the old manual Layover
+    // Credit it replaced) IS date-stamped and IS included: see tripTimeCreditHours below.
     overrides = overrides || {};
     const core = computeCreditCore(days, {getUnsched, maxDateObj, forecast: overrides.forecast === true});
     const completion = overrides.completion != null ? overrides.completion : core.completion;
     const tripTimeTotal = overrides.tripTimeTotal != null ? overrides.tripTimeTotal : core.tripTimeTotal;
+    // TRIP TIME credit — the authoritative computeTripTimeCredit() engine for a forecast/live
+    // caller; the ACTUAL Fanfare caller passes its own imported figure via
+    // overrides.tripTimeCreditHours instead of ever calling the rotation engine on imported data.
+    const tripTimeCreditHours = overrides.tripTimeCreditHours != null ? overrides.tripTimeCreditHours : computeTripTimeCredit(days, maxDateObj).creditHours;
     const standbyCredit = standbyCreditHours(days, maxDateObj);
     const simCredit = computeSimCredit(days, maxDateObj, (typeof isInstructor === 'function') ? isInstructor() : false);
     const paidoffCredit = countCode('OFFP', maxDateObj, days) * PAIDOFF_UNIT;
@@ -5988,7 +6142,7 @@
     const flightDays = countFlightDays(maxDateObj, days);
     const transportUnits = countTransportUnits(maxDateObj, days) + simTransportUnits(days, maxDateObj);
     const perDiemUnits = countPerDiemUnits(maxDateObj, days);
-    const totalCreditHours = core.block + core.overageBonus + completion + nfaTotal + incentivesHours;
+    const totalCreditHours = core.block + core.overageBonus + completion + nfaTotal + incentivesHours + tripTimeCreditHours;
 
     const rateH = parseFloat(document.getElementById('rate-hourly').value) || 0;
     const rateD = parseFloat(document.getElementById('rate-perdiem').value) || 0;
@@ -6004,7 +6158,7 @@
     const perDiemILS = (basePerDiemUSD + nyPerDiemUSD) * fx;
     const totalIncome = creditPay + seniority + transportPay + perDiemILS;
 
-    return {totalIncome, totalCreditHours, flightDays, transportUnits, perDiemUnits, simCredit, incentivesHours, nyPerDiemUSD, nyPerDiemEstimated: ny.hasEstimate && !ny.hasActual, missingCount: core.missingCount, estimatedCount: core.estimatedCount, estimatedBlockHours: core.estimatedBlockHours, realBlockHours: core.realBlockHours, rawBlockHours: core.rawBlockHours, tripTimeTotal, completion, block: core.block, totalIncentives: core.totalIncentives};
+    return {totalIncome, totalCreditHours, flightDays, transportUnits, perDiemUnits, simCredit, incentivesHours, nyPerDiemUSD, nyPerDiemEstimated: ny.hasEstimate && !ny.hasActual, missingCount: core.missingCount, estimatedCount: core.estimatedCount, estimatedBlockHours: core.estimatedBlockHours, realBlockHours: core.realBlockHours, rawBlockHours: core.rawBlockHours, tripTimeTotal, tripTimeCreditHours, completion, block: core.block, totalIncentives: core.totalIncentives};
   }
 
   // ---- AIMS payroll workbook parser (a different file than the "Personal Schedule Report" —
@@ -6276,7 +6430,11 @@
     const resultEl = document.getElementById('recon-file-result');
     if(!resultEl) return;
 
-    const predicted = computeIncomeForDataset(rosterData, maxDateObj, predictedGetUnsched, {includeSeniority: true, forecast: true});
+    // TRIP TIME predicted: the ONE authoritative rotation-based engine, computed once here so
+    // both the "Trip Time" row and Total Credit Hours agree with each other (passed through as
+    // an override rather than letting computeIncomeForDataset recompute it a second time).
+    const predictedTripTime = computeTripTimeCredit(rosterData, maxDateObj);
+    const predicted = computeIncomeForDataset(rosterData, maxDateObj, predictedGetUnsched, {includeSeniority: true, forecast: true, tripTimeCreditHours: predictedTripTime.creditHours});
     let actualOverrides = null;
     if(dutyTotals){
       let tripTimeTotal = 0, completion = 0;
@@ -6284,7 +6442,10 @@
         const dObj = buildDateObj(dt.date, '23:59', dayYear(dt));
         if(dObj && dObj <= maxDateObj){ tripTimeTotal += dt.tt; completion += dt.topUp; }
       });
-      actualOverrides = {tripTimeTotal, completion};
+      // ACTUAL TRIP TIME stays sourced from the imported payroll workbook, never recomputed by
+      // the rotation engine — same imported figure feeds both the "Trip Time" row (via
+      // tripTimeTotal) and Total Credit Hours (via tripTimeCreditHours).
+      actualOverrides = {tripTimeTotal, tripTimeCreditHours: tripTimeTotal, completion};
     }
     const actual = computeIncomeForDataset(actualDays, maxDateObj, null, actualOverrides);
     const pilotSummary = lastReconContext.pilotSummary;
@@ -6306,7 +6467,7 @@
     const diff = actual.totalIncome - predicted.totalIncome;
 
     resultEl.innerHTML = `
-      <div class="help-text" style="margin-top:8px;">Comparing through <b>${maxDateStr}</b> — the latest date this file has data for${isPartial ? ' (looks like a partial-period file, not the full month — the comparison only covers up to there)' : ''}.${actual.missingCount ? ' ' + actual.missingCount + ' leg(s) in the file had no computable block hours, so the actual total may be understated.' : ''}${predicted.estimatedCount ? ' Predicted uses your Route Block-Hour Estimates for ' + predicted.estimatedCount + ' leg(s) missing real times.' : ''} Layover credit and manual Ground Activity entries aren't date-stamped, so both sides exclude them.${extraNote} The point isn't to hit ₪0 — it's to catch cases where Actual is meaningfully <i>below</i> Predicted, which can mean crew assignment missed an incentive you were owed. Actual coming in above Predicted isn't a problem worth chasing.</div>
+      <div class="help-text" style="margin-top:8px;">Comparing through <b>${maxDateStr}</b> — the latest date this file has data for${isPartial ? ' (looks like a partial-period file, not the full month — the comparison only covers up to there)' : ''}.${actual.missingCount ? ' ' + actual.missingCount + ' leg(s) in the file had no computable block hours, so the actual total may be understated.' : ''}${predicted.estimatedCount ? ' Predicted uses your Route Block-Hour Estimates for ' + predicted.estimatedCount + ' leg(s) missing real times.' : ''} Manual Ground Activity entries aren't date-stamped, so both sides exclude them.${predictedTripTime.incompleteCount ? ' Predicted TRIP TIME excludes ' + predictedTripTime.incompleteCount + ' trip/layover segment(s) missing required timing data.' : ''}${extraNote} The point isn't to hit ₪0 — it's to catch cases where Actual is meaningfully <i>below</i> Predicted, which can mean crew assignment missed an incentive you were owed. Actual coming in above Predicted isn't a problem worth chasing.</div>
       <table style="width:100%; border-collapse:collapse; margin-top:10px; font-size:12.5px;">
         <tr style="border-bottom:1px solid var(--divider);">
           <th style="text-align:left; padding:6px 4px; color:var(--text-muted); font-weight:600;"></th>
@@ -6314,7 +6475,7 @@
           <th style="text-align:right; padding:6px 4px; color:var(--text-muted); font-weight:600;">Actual</th>
         </tr>
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Block Hours</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.rawBlockHours.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.rawBlockHours.toFixed(2)}h</td></tr>
-        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Trip Time</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.tripTimeTotal.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.tripTimeTotal.toFixed(2)}h</td></tr>
+        <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Trip Time <span class="mono hint">(3h/24h — Predicted computed, Actual imported)</span></td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.tripTimeCreditHours.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.tripTimeTotal.toFixed(2)}h</td></tr>
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Completion Hours</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.completion.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.completion.toFixed(2)}h</td></tr>
         <tr style="border-bottom:1px solid var(--divider); cursor:pointer;" role="button" tabindex="0" aria-label="Show incentive breakdown" onclick="showIncentiveModal()"><td style="padding:6px 4px; color:var(--accent-cyan);">Incentives <span class="mono hint">▸ tap for detail</span></td><td style="text-align:right; padding:6px 4px; color:var(--accent-cyan);" class="mono">${predicted.totalIncentives.toFixed(2)}h</td><td style="text-align:right; padding:6px 4px; color:var(--accent-cyan);" class="mono">${actual.totalIncentives.toFixed(2)}h</td></tr>
         <tr style="border-bottom:1px solid var(--divider);"><td style="padding:6px 4px;">Flight Days</td><td style="text-align:right; padding:6px 4px;" class="mono">${predicted.flightDays}</td><td style="text-align:right; padding:6px 4px;" class="mono">${actual.flightDays}</td></tr>
@@ -6390,7 +6551,6 @@
     const seniority = parseFloat(document.getElementById('seniority-value').value) || 0;
     const fx = parseFloat(document.getElementById('fx-rate').value) || 0;
     const rateTransport = parseFloat(document.getElementById('rate-transport').value) || 0;
-    const layoverCredit = parseFloat(document.getElementById('layover-hours').value) || 0;
     const gaTraining = parseFloat(document.getElementById('ga-training').value) || 0;
     const gaProject = parseFloat(document.getElementById('ga-project').value) || 0;
     const gaSpecialCall = parseFloat(document.getElementById('ga-specialcall').value) || 0;
@@ -6412,7 +6572,12 @@
     const flightDays = countFlightDays();
     const transportUnits = countTransportUnits() + simTransportUnits(rosterData, null);
     const perDiemUnits = countPerDiemUnits();
-    const totalCreditHours = blockCredit + overageBonus + completion + nfaTotal + gaTotal + layoverCredit + incentivesHours;
+    // TRIP TIME — the ONE authoritative rotation-based engine (replaces the old manual
+    // "Layover Credit" input entirely). 3.0 credit hours per 24:00 of qualifying non-block time
+    // across each trip/rotation (quickie, normal layover, or multi-leg — one unified formula).
+    const tripTime = computeTripTimeCredit(rosterData, null);
+    const tripTimeCredit = tripTime.creditHours;
+    const totalCreditHours = blockCredit + overageBonus + completion + nfaTotal + gaTotal + tripTimeCredit + incentivesHours;
 
     const creditPay = totalCreditHours * rateH;
     const transportPay = transportUnits * rateTransport;
@@ -6463,6 +6628,13 @@
       }
     }
     document.getElementById('brk-ga-total').textContent = gaTotal.toFixed(2) + 'h';
+    const tripTimeEl = document.getElementById('brk-trip-time');
+    if(tripTimeEl) tripTimeEl.textContent = hhmm(Math.round(tripTimeCredit * 60));
+    const tripTimeNoticeEl = document.getElementById('trip-time-incomplete-notice');
+    if(tripTimeNoticeEl){
+      tripTimeNoticeEl.hidden = tripTime.incompleteCount === 0;
+      if(tripTime.incompleteCount > 0) tripTimeNoticeEl.textContent = 'TRIP TIME may be understated: ' + tripTime.incompleteCount + ' trip/layover segment(s) are missing required timing data.';
+    }
     document.getElementById('brk-credit-total').textContent = totalCreditHours.toFixed(2) + 'h';
     document.getElementById('brk-total-incentives').textContent = totalIncentives.toFixed(2) + 'h';
     document.getElementById('lbl-flightdays-1').textContent = transportUnits;
@@ -6510,7 +6682,7 @@
     const assumedZero = [];  // blank -> silently treated as 0
     if(raw('rate-hourly') == null) missing.push('hourly flight pay');
     if(raw('rate-perdiem') != null && raw('fx-rate') == null) missing.push('USD→ILS exchange rate');
-    [['rate-perdiem','per-diem rate'],['fx-rate','exchange rate'],['rate-transport','transportation rate'],['layover-hours','layover credit']].forEach(([id,label]) => {
+    [['rate-perdiem','per-diem rate'],['fx-rate','exchange rate'],['rate-transport','transportation rate']].forEach(([id,label]) => {
       if(raw(id) == null && missing.indexOf(label) === -1 && missing.indexOf('USD→ILS exchange rate') === -1) assumedZero.push(label);
     });
     return { missing, assumedZero };
@@ -6528,7 +6700,7 @@
       el.innerHTML = html; el.hidden = html === '';
     });
   }
-  ['rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','layover-hours','ga-training','ga-project','ga-specialcall','ga-cancelled','recon-actual'].forEach(id=>{
+  ['rate-hourly','rate-perdiem','seniority-value','fx-rate','rate-transport','ga-training','ga-project','ga-specialcall','ga-cancelled','recon-actual'].forEach(id=>{
     document.getElementById(id).addEventListener('input', recalcSalary);
   });
   recalcSalary();
