@@ -1655,6 +1655,16 @@
   // Display-only: returns a trimmed non-empty string, or '' — never null/undefined.
   function dispVal(v){ return (v != null && String(v).trim() !== '') ? String(v).trim() : ''; }
 
+  // DISPLAY-ONLY time for a leg. AIMS-sourced legs (calendar sync + screenshot
+  // import) carry the true operational local-station wall-clock pair in
+  // leg.localTime (set by normalizedActivityToRosterDay) ALONGSIDE the
+  // UTC-converted leg.time the rest of the app depends on for block hours,
+  // Shabbat detection, and flight-status registration. Every user-facing
+  // renderer must show localTime when present — never leg.time directly, and
+  // never the other way around. This function changes ONLY what the pilot
+  // sees; leg.time / leg.timeBasis / leg.block are untouched everywhere else.
+  function legDisplayTime(l){ return (l && l.localTime) || (l && l.time) || null; }
+
   function renderRoster(){
     const el = document.getElementById('roster-list');
     const dayIndex = computeActivityDayIndices();
@@ -1695,7 +1705,8 @@
             : (resolved.blockEstimated
               ? `<span class="mono lg-block lg-block--est">${hhmm(resolved.blockMinutes)} est.</span>`
               : `<span class="mono lg-block">(${resolved.blockHours.toFixed(2)}h)</span>`);
-          const timeHtml = l.time != null ? l.time
+          const dispTime = legDisplayTime(l);
+          const timeHtml = dispTime != null ? dispTime
             : ((resolved.blockSource === 'route_estimate' || resolved.blockSource === 'aerodatabox_schedule')
               ? '' : '<span class="mono" style="color:var(--danger)">no time</span>');
           html += `<div class="lg">
@@ -3638,7 +3649,7 @@
       if(d.code === 'DUTY'){
         html += `<div class="stub"><div class="stub-head"><span>${d.day} ${d.date}</span><span>Report ${d.report || '?'} · Debrief ${d.debrief || '?'}${d.flatCredit ? ' <span class="badge">4-leg, flat 8h</span>' : ''}${d.crew && d.crew.length ? ' <span class="badge" style="border-color:var(--accent-cyan);color:var(--accent-cyan)">' + d.crew.length + ' crew</span>' : ''}</span></div>`;
         d.legs.forEach(l => {
-          html += `<div class="leg-row"><span class="leg-flt">${l.flt || '?'}${l.ac ? ' [' + l.ac + ']' : ''}</span><span class="leg-route">${l.from || '?'} → ${l.to || '?'}</span><span class="leg-time">${l.time || 'no time found'}${l.block != null ? ' · ' + l.block.toFixed(2) + 'h' : ''}</span></div>`;
+          html += `<div class="leg-row"><span class="leg-flt">${l.flt || '?'}${l.ac ? ' [' + l.ac + ']' : ''}</span><span class="leg-route">${l.from || '?'} → ${l.to || '?'}</span><span class="leg-time">${legDisplayTime(l) || 'no time found'}${l.block != null ? ' · ' + l.block.toFixed(2) + 'h' : ''}</span></div>`;
         });
         html += `</div>`;
       } else {
