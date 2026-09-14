@@ -63,6 +63,7 @@ vm.runInContext(
     extractConst(html, "AIRPORT_TZ"),
     extractConst(html, "AIRPORT_UTC_OFFSET"),
     extractConst(html, "DUTY_CODE_MAP"),
+    extractConst(html, "LEGACY_ROSTER_YEAR"),
     extractFn(html, "getAirportOffsets"),
     extractFn(html, "tzOffsetMinutes"),
     extractFn(html, "zonedWallTimeToUtcMs"),
@@ -73,8 +74,17 @@ vm.runInContext(
     extractConst(html, "_TIME_RE") + ";", // already `const NAME = /regex/;` shape
     extractFn(html, "normalizedActivityToRosterDay"),
     extractFn(html, "legDisplayTime"),
-    extractFn(html, "dayOffset"),
-    extractFn(html, "toIsraelLocal"),
+    // legOverlapsShabbatWindow now resolves times via the SAME authoritative UTC-conversion
+    // chain (legDepUtcMs/legArrUtcMs -> _parseLegClock -> leg.time) every other timezone-
+    // sensitive feature uses, DST-aware via zonedWallTimeToUtcMs -- replaces the old hardcoded
+    // +3h toIsraelLocal()/dayOffset() (removed, no other callers).
+    extractFn(html, "isValidYear"),
+    extractFn(html, "dayYear"),
+    extractFn(html, "_dayDateParts"),
+    extractFn(html, "plusDaysFromMarker"),
+    extractFn(html, "_parseLegClock"),
+    extractFn(html, "legDepUtcMs"),
+    extractFn(html, "legArrUtcMs"),
     extractFn(html, "legOverlapsShabbatWindow"),
     extractFn(html, "isShabbatDay"),
   ].join("\n"),
@@ -157,9 +167,19 @@ test("fallback: a leg with no localTime (XLSX / manual / already-UTC import) dis
 });
 
 test("Shabbat detection is untouched: it reads leg.time (still UTC), never leg.localTime", () => {
-  const src = extractFn(html, "legOverlapsShabbatWindow");
-  assert.match(src, /l\.time/);
-  assert.equal(src.includes("localTime"), false, "Shabbat detection must not be changed to read localTime");
+  // legOverlapsShabbatWindow() itself no longer references `l.time` directly — it now resolves
+  // dep/arr through legDepUtcMs()/legArrUtcMs() (DST-aware, via zonedWallTimeToUtcMs), which in
+  // turn parse the leg's clock through _parseLegClock(). Check the WHOLE chain, not just the
+  // outer function, for the same invariant this test has always protected: Shabbat detection
+  // must read the canonical UTC-basis leg.time, never the display-only leg.localTime override.
+  const chain = [
+    extractFn(html, "legOverlapsShabbatWindow"),
+    extractFn(html, "legDepUtcMs"),
+    extractFn(html, "legArrUtcMs"),
+    extractFn(html, "_parseLegClock"),
+  ].join("\n");
+  assert.match(chain, /leg\.time/);
+  assert.equal(chain.includes("localTime"), false, "Shabbat detection must not be changed to read localTime");
 
   // A leg whose (unchanged, UTC) leg.time crosses Fri 19:00 - Sat 21:00 Israel
   // local — regardless of what leg.localTime says — must still register as Shabbat.

@@ -1502,34 +1502,37 @@
   // A future phase may add an explicitly-classified company network table here.
   // Integer MINUTES, directional "FROM-TO" keys. Must exist before renderRoster().
   const DEFAULT_ROUTE_BLOCK_ESTIMATES = {};
-  function dayOffset(dayAbbr, offset){
-    const idx = WEEK.indexOf(dayAbbr);
-    if(idx === -1) return dayAbbr;
-    return WEEK[(idx + offset + 7) % 7];
-  }
-  function toIsraelLocal(hhmm, dayAbbr){
-    const [h, m] = hhmm.split(':').map(Number);
-    let mins = h * 60 + m + 180; // UTC -> Israel (+3h)
-    let day = dayAbbr;
-    if(mins >= 1440){ mins -= 1440; day = dayOffset(day, 1); }
-    return {hour: mins / 60, day};
-  }
+  // A leg's real [dep, arr) UTC instants -> whether they overlap the contractual Shabbat window,
+  // evaluated in true Asia/Jerusalem local time (DST-aware) for the week containing this duty
+  // day. Reuses the SAME UTC-conversion (legDepUtcMs/legArrUtcMs) and zone-conversion
+  // (zonedWallTimeToUtcMs) primitives every other timezone-sensitive feature in this codebase
+  // already uses — not a second, independent timezone implementation. Previously used a hardcoded
+  // +3h "UTC -> Israel" conversion (toIsraelLocal/dayOffset, now removed — no other callers),
+  // which silently mis-set the boundary by exactly 1h during Israel's winter clock (IST, UTC+2,
+  // roughly late Oct - late Mar): a real production defect found by the compensation-engine
+  // audit, confirmed against real dates, fixed here.
+  //
+  // Overlap semantics are intentionally unchanged (open interval [Fri 19:00, Sat 21:00) local):
+  // a leg departing exactly at Fri 19:00 qualifies; a leg arriving exactly at Fri 19:00 (having
+  // departed earlier) does not; a leg arriving exactly at Sat 21:00 qualifies; a leg departing
+  // exactly at Sat 21:00 does not — this asymmetry is the correct, confirmed business rule, not
+  // an artifact to "fix".
   function legOverlapsShabbatWindow(d, l){
-    if(!l.time) return false;
-    const m = l.time.match(/(\d{2}:\d{2})\s*[–-]\s*(\d{2}:\d{2})(⁺¹|\+1)?/);
-    if(!m) return false;
-    const depRaw = m[1], arrRaw = m[2], plusOne = !!m[3];
-    const dep = toIsraelLocal(depRaw, d.day);
-    const arrDayAbbr = plusOne ? dayOffset(d.day, 1) : d.day;
-    const arr = toIsraelLocal(arrRaw, arrDayAbbr);
-
-    let legStart = WEEK.indexOf(dep.day) * 1440 + dep.hour * 60;
-    let legEnd = WEEK.indexOf(arr.day) * 1440 + arr.hour * 60;
-    if(legEnd < legStart) legEnd += 7 * 1440; // crossed week boundary
-
-    const windowStart = WEEK.indexOf('FRI') * 1440 + 19 * 60;
-    const windowEnd = WEEK.indexOf('SAT') * 1440 + 21 * 60; // Sat 21:00 Israel time
-    return legStart < windowEnd && legEnd > windowStart; // any overlap with Fri 19:00 - Sat 21:00
+    const depMs = legDepUtcMs(d, l), arrMs = legArrUtcMs(d, l);
+    if(depMs == null || arrMs == null) return false;
+    const p = _dayDateParts(d);
+    const dowIdx = WEEK.indexOf(d && d.day);
+    if(!p || dowIdx === -1) return false;
+    // This week's Friday as a real calendar date — shifting by whole days is timezone-agnostic,
+    // only the window-boundary conversion below needs to be DST-aware.
+    const friIdx = WEEK.indexOf('FRI');
+    const fri = new Date(Date.UTC(p.yr, p.mm - 1, p.dd + (friIdx - dowIdx)));
+    const sat = new Date(Date.UTC(fri.getUTCFullYear(), fri.getUTCMonth(), fri.getUTCDate() + 1));
+    const tz = AIRPORT_TZ.TLV; // Asia/Jerusalem
+    const windowStart = zonedWallTimeToUtcMs(fri.getUTCFullYear(), fri.getUTCMonth() + 1, fri.getUTCDate(), 19, 0, tz);
+    const windowEnd = zonedWallTimeToUtcMs(sat.getUTCFullYear(), sat.getUTCMonth() + 1, sat.getUTCDate(), 21, 0, tz);
+    if(windowStart == null || windowEnd == null) return false;
+    return depMs < windowEnd && arrMs > windowStart; // any overlap with Fri 19:00 - Sat 21:00 Israel local
   }
   function isShabbatDay(d){
     // If ANY leg that day touches the Shabbat window (Fri 19:00 - Sat 21:00 Israel time),

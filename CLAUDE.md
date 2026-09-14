@@ -91,7 +91,10 @@ deliberate, not an oversight.
 ```
 
 Leg `time` strings are always stored as UTC, even though `report`/`debrief` are local Israel time.
-Shabbat detection converts UTC→Israel local internally (`toIsraelLocal`, +3h).
+Shabbat detection (`legOverlapsShabbatWindow`) converts UTC→Israel local via `zonedWallTimeToUtcMs`
+against `AIRPORT_TZ.TLV` (`Asia/Jerusalem`), DST-aware — a prior hardcoded +3h conversion
+mis-evaluated the window by 1h during Israel's winter clock (IST); fixed and covered by
+`test/core-credit-engine.test.js`.
 
 **The salary engine** (in order of composition):
 
