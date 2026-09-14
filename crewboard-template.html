@@ -6029,11 +6029,19 @@
   // detectImplicitLayoverGaps() already uses (generalized from "any gap" to
   // "any continuation"), never joining two duties merely because their dates
   // are adjacent. A rotation ends the moment some duty's last leg returns
-  // home. Deliberately conservative: a duty that doesn't begin at home and has
-  // no linking predecessor among the still-unconsumed duties is excluded
-  // entirely, never guessed into a rotation; an open rotation with no
-  // continuation found in the visible data is returned with complete:false
-  // rather than fabricated.
+  // home.
+  //
+  // Mid-rotation window boundary: a duty that doesn't begin at home is still
+  // evidence of a real trip — in this single-base data model there is no other
+  // reason a DUTY's first leg would depart somewhere other than home, except
+  // that its true outbound leg sits outside the currently loaded roster
+  // window. Rather than silently excluding it, it (and whatever it chains
+  // into, by the SAME link test) is still walked and returned as its own
+  // rotation with complete:false and missingPredecessor:true — computeTripTimeCredit()
+  // already turns any complete:false rotation into an incompleteCount
+  // increment, never a fabricated credit. Deliberately conservative in the
+  // other direction too: a duty entirely outside maxDateObj is not walked at
+  // all — it's out of scope for the comparison, not evidence of anything.
   //
   // Cancellation/reassignment (confirmed rule): a CXL day has no legs, so the
   // "next duty" search transparently skips over it and lands on whichever
@@ -6050,15 +6058,15 @@
     for(let i = 0; i < duties.length; i++){
       if(consumed.has(i)) continue;
       const first = duties[i];
-      if(_dutyReportStation(first) !== home) continue; // not a rotation start — never guessed
       if(!_withinRange(first, maxDateObj)) continue;
+      const startsAtHome = _dutyReportStation(first) === home;
       let legs = [];
       let cur = first, curIdx = i, complete = false;
       while(true){
         consumed.add(curIdx);
         legs = legs.concat(cur.legs);
         const lastCity = String(cur.legs[cur.legs.length - 1].to || '').trim().toUpperCase();
-        if(lastCity === home){ complete = true; break; }
+        if(lastCity === home){ complete = startsAtHome; break; } // an away-start is never complete — its true REPORT is missing
         let foundIdx = -1;
         for(let j = curIdx + 1; j < duties.length; j++){
           if(consumed.has(j)) continue;
@@ -6067,7 +6075,7 @@
         if(foundIdx === -1) break; // open-ended — no continuation in the visible data
         curIdx = foundIdx; cur = duties[foundIdx];
       }
-      rotations.push({ startDay: first, endDay: cur, legs, complete });
+      rotations.push({ startDay: first, endDay: cur, legs, complete, missingPredecessor: !startsAtHome });
     }
     return rotations;
   }
@@ -6098,7 +6106,10 @@
       if(!blockOk){ incompleteCount++; return; }
       const elapsedHours = (onBlockMs - reportMs) / 3600000;
       const qualifying = elapsedHours - totalBlock;
-      if(qualifying <= 0) return; // block >= elapsed span — nothing owed, not a data error worth flagging
+      // block >= elapsed span is internally inconsistent data (BLOCK can never legitimately
+      // exceed real elapsed time) — contribute 0, never negative credit, but flag it as a
+      // data-quality issue rather than silently treating it as "nothing owed".
+      if(qualifying <= 0){ incompleteCount++; return; }
       const hrs = qualifying * TRIP_TIME_CREDIT_PER_HOUR;
       creditHours += hrs;
       rows.push({ startDate: r.startDay.date, endDate: r.endDay.date, qualifyingHours: qualifying, creditHours: hrs });
