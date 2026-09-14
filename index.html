@@ -4114,7 +4114,7 @@
       if(day.legs && day.legs[0]){ if(day.legs[0].timeBasis === 'utc') anyUtc = true; else if(day.legs[0].timeBasis === 'local') anyLocal = true; }
       if(byDate.has(day.date) && day.code === 'DUTY'){
         const ex = byDate.get(day.date);
-        if(ex.code === 'DUTY'){ ex.legs = ex.legs.concat(day.legs); if(day.crew) ex.crew = (ex.crew || []).concat(day.crew); if(!ex.report) ex.report = day.report; if(day.debrief) ex.debrief = day.debrief; ex.flatCredit = ex.legs.length === 4 ? 8 : undefined; return; }
+        if(ex.code === 'DUTY'){ ex.legs = ex.legs.concat(day.legs); if(day.crew) ex.crew = (ex.crew || []).concat(day.crew); if(!ex.report){ ex.report = day.report; ex.reportTimeBasis = day.reportTimeBasis; } if(day.debrief) ex.debrief = day.debrief; ex.flatCredit = ex.legs.length === 4 ? 8 : undefined; return; }
       }
       if(!byDate.has(day.date)){ byDate.set(day.date, day); order.push(day.date); }
       else byDate.set(day.date, day);
@@ -4822,7 +4822,10 @@
         const ex = work.find(d => d.date === nd.date && d.year === nd.year && d.code === 'DUTY' && nd.code === 'DUTY');
         if(ex){
           ex.legs = (ex.legs || []).concat(nd.legs);
-          if(!ex.report && nd.report) ex.report = nd.report;
+          // report/reportTimeBasis always travel together — nd (from normalizedActivityToRosterDay,
+          // always local-basis) never sets reportTimeBasis, so this also clears a stale UTC tag an
+          // earlier import (e.g. an "All times in UTC" spreadsheet) may have left on ex.
+          if(!ex.report && nd.report){ ex.report = nd.report; ex.reportTimeBasis = nd.reportTimeBasis; }
           if(nd.debrief) ex.debrief = nd.debrief;
         } else {
           work.push(nd);
@@ -4845,7 +4848,11 @@
           if(!fresh) return fail('an updated flight produced no leg');
           fresh.sync = mkSync(op);
           work[tgt.dayIdx].legs[tgt.legIdx] = fresh;
-          if(nd.report) work[tgt.dayIdx].report = nd.report;
+          // Same pairing as the ADD branch above: refreshing REPORT from a calendar-sync source
+          // (always local-basis) must also refresh reportTimeBasis, so a day that was originally
+          // imported UTC-basis (e.g. via an "All times in UTC" spreadsheet) never keeps a stale
+          // UTC tag on a REPORT value a later sync has overwritten with genuinely local-basis text.
+          if(nd.report){ work[tgt.dayIdx].report = nd.report; work[tgt.dayIdx].reportTimeBasis = nd.reportTimeBasis; }
           if(nd.debrief) work[tgt.dayIdx].debrief = nd.debrief;
         } else {
           const d0 = work[tgt.dayIdx];
@@ -5914,17 +5921,21 @@
 
   // ---- New York hourly per-diem ($2 / elapsed layover hour, USD) ---------
   // Span: actual ON BLOCK in New York  ->  next NY-departure duty's REPORT time
-  // (New York local). One continuous elapsed span, independent of how many
-  // LAYOVER rows sit between the two timestamps.
+  // (New York local unless the duty's REPORT is explicitly UTC-basis). One
+  // continuous elapsed span, independent of how many LAYOVER rows sit between
+  // the two timestamps.
   function _nextNyDepartureReport(days, afterIdx){
     for(let k = afterIdx + 1; k < days.length; k++){
       const nd = days[k];
       if(!nd || nd.code !== 'DUTY' || !Array.isArray(nd.legs) || nd.legs.length === 0) continue;
       if(String(nd.legs[0].from == null ? '' : nd.legs[0].from).trim().toUpperCase() !== 'JFK') continue;
-      const rm = /^(\d{1,2}):(\d{2})/.exec(String(nd.report || ''));
-      const p = _dayDateParts(nd);
-      if(!rm || !p) return { found: true, reportMs: null };   // NY departure exists, REPORT missing/incomplete
-      return { found: true, reportMs: zonedWallTimeToUtcMs(p.yr, p.mm, p.dd, +rm[1], +rm[2], 'America/New_York') };
+      // dutyReportUtcMs() is the ONE authoritative REPORT-time interpretation (station-local via
+      // AIRPORT_TZ['JFK'] = 'America/New_York' by default, or the UTC wall-clock value directly
+      // when nd.reportTimeBasis === 'utc') — reused here rather than re-implementing a second,
+      // JFK-only conversion path that could silently diverge from it. A duplicated conversion
+      // path unaware of reportTimeBasis is exactly what produced the TRIP TIME double-conversion
+      // bug this fix follows up on.
+      return { found: true, reportMs: dutyReportUtcMs(nd) };   // null = NY departure exists, REPORT missing/incomplete
     }
     return { found: false, reportMs: null };
   }
