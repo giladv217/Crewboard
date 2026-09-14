@@ -1220,7 +1220,7 @@
         const x = marginX + col * cellW;
         const cy = y + row * cellH;
         let bg = '#f4f6f8', border = '#dde3e8';
-        if(item.code === 'DUTY'){ bg = '#e3f0fc'; border = '#a9cdec'; }
+        if(item.code === 'DUTY' || item.code === 'LAD'){ bg = '#e3f0fc'; border = '#a9cdec'; }
         else if(item.code === 'LAYOVER'){ bg = '#fdedd6'; border = '#f0c98a'; }
         ctx.fillStyle = bg; ctx.fillRect(x + 2, cy + 2, cellW - 4, cellH - 4);
         ctx.strokeStyle = border; ctx.lineWidth = 1; ctx.strokeRect(x + 2, cy + 2, cellW - 4, cellH - 4);
@@ -1230,21 +1230,36 @@
         ctx.fillText(item.date.split('/')[0], x + 8, cy + 18);
 
         ctx.font = '400 10.5px "IBM Plex Sans", sans-serif';
+        // Same semantic data as the Calendar tab (buildCalendarDays() + semanticDayLabel()) —
+        // this must never re-derive STAY/CRST/LAD/destination meaning independently.
         if(item.code === 'DUTY'){
           ctx.fillStyle = '#1a5a9e';
+          let ly = cy + 36;
+          if(item.dests && item.dests.length){
+            // Destination-first: the away city is the headline, Report/Debrief follow — for a
+            // same-day round trip (e.g. TLV-PFO-TLV) item.dests already holds only the away leg
+            // (buildCalendarDays filters out home-base legs), so this is the meaningful city.
+            ctx.font = '600 11px "IBM Plex Sans", sans-serif';
+            ctx.fillText(item.dests.map(d => getFlag(d) + ' ' + d).join(' '), x + 8, ly);
+            ctx.font = '400 10.5px "IBM Plex Sans", sans-serif';
+            ly += 14;
+          }
           const leaveHome = driveMinutes ? shiftTimeStr(item.report, -driveMinutes) : item.report;
           const backHome = driveMinutes ? shiftTimeStr(item.debrief, driveMinutes) : item.debrief;
-          ctx.fillText((driveMinutes ? 'Leave ' : 'Rep ') + leaveHome, x + 8, cy + 36);
-          ctx.fillText((driveMinutes ? 'Home ' : 'Deb ') + backHome, x + 8, cy + 50);
-          if(item.dests && item.dests.length){
-            ctx.font = '600 10px "IBM Plex Sans", sans-serif';
-            ctx.fillText(item.dests.map(d => getFlag(d) + ' ' + d).join(' '), x + 8, cy + 66);
-            ctx.font = '400 10.5px "IBM Plex Sans", sans-serif';
-          }
+          ctx.fillText((driveMinutes ? 'Leave ' : 'Rep ') + leaveHome, x + 8, ly); ly += 14;
+          ctx.fillText((driveMinutes ? 'Home ' : 'Deb ') + backHome, x + 8, ly);
+        } else if(item.code === 'LAD'){
+          ctx.fillStyle = '#1a5a9e';
+          ctx.font = '600 11px "IBM Plex Sans", sans-serif';
+          ctx.fillText(semanticDayLabel(item), x + 8, cy + 36);
+        } else if(item.code === 'CRST'){
+          ctx.fillStyle = '#a06a1a';
+          ctx.font = '600 11px "IBM Plex Sans", sans-serif';
+          ctx.fillText(semanticDayLabel(item), x + 8, cy + 36);
         } else if(item.code === 'LAYOVER'){
           ctx.fillStyle = '#a06a1a';
           ctx.fillText('Away', x + 8, cy + 36);
-          if(item.dests[0]) ctx.fillText(item.dests[0], x + 8, cy + 50);
+          ctx.fillText(item.dests[0] || semanticDayLabel(item), x + 8, cy + 50);
         } else {
           ctx.fillStyle = '#8a929a';
           ctx.fillText('Home', x + 8, cy + 36);
@@ -1399,7 +1414,15 @@
   const HOME = 'TLV'; // CrewBoard home base — a company constant (single-base airline), not user-configurable
   const EXCLUDED = ['EIL']; // TEMPLATE: set to your per-diem-excluded destination code(s)
   const EILAT_CODE = 'EIL'; // TEMPLATE: set to your airline's short-hop/low-minimum destination code, or '' if none
-  const DUTY_CODE_MAP = {ROFF:'Requested Day Off', CXL:'Canceled flight', OFF:'Day off', OFFP:'Paid day off', SBSM:'Standby — short morning', SBSE:'Standby — short evening', LSBY:'Long standby', SSBY:'Long standby (became short)', SIM:'Simulator training', INS:'Instruction (ground)', RTNH:'Remote training (half day)', PM:'Request evening off', MEMO:'Memo'};
+  const DUTY_CODE_MAP = {ROFF:'Requested Day Off', CXL:'Canceled flight', OFF:'Day off', OFFP:'Paid day off', SBSM:'Standby — short morning', SBSE:'Standby — short evening', LSBY:'Long standby', SSBY:'Long standby (became short)', SIM:'Simulator training', INS:'Instruction (ground)', RTNH:'Remote training (half day)', PM:'Request evening off', MEMO:'Memo', CRST:'Contract Rest'};
+  // CRST — contractual post-flight rest (AIMS ">OFF" + a "post-flight rest" description). NOT a
+  // flight, NOT an Activity Day, NOT available for assignment/replacement — deliberately excluded
+  // from AVAILABLE_CODES below rather than inheriting plain OFF's availability behavior.
+  // Recognised by isCrstFreeText() — the ONE place that decides "does this AIMS text mean CRST",
+  // called from every import path that carries a free-text label (calendar sync, vision/
+  // screenshot, and the single-sheet Personal Schedule Report). See NYC_AIRPORTS below for the
+  // separate, unrelated LAD (Late Arrival Day) rule.
+  function isCrstFreeText(text){ return /post[- ]?flight\s*rest/i.test(String(text || '')); }
   const MONTHLY_BLOCK_THRESHOLD = 83; // raw block hours per month; each hour above this earns 1.5x (extra +0.5/hr bonus)
 
   // ── Roster calendar year (C3) ────────────────────────────────────────────
@@ -1522,18 +1545,22 @@
   }
 
   function computeActivityDayIndices(days){
-    // Activity-day set (C3.3): DUTY + LAYOVER + INS + SIM — each counts once per
-    // calendar date, in order. Standby and paid-off days do NOT count.
+    // Activity-day set (C3.3): DUTY + LAYOVER + INS + SIM + LAD — each counts once per
+    // calendar date, in order. Standby and paid-off days do NOT count. Neither does CRST
+    // (contractual rest is explicitly NOT an Activity Day — see DUTY_CODE_MAP comment).
     // COUNTING ONLY. The 14th-activity-day PAY multiplier (veteranMult, +1.5×)
     // is applied inside computeCreditCore to DUTY block hours ONLY — SIM credit
     // comes from computeSimCredit and is never multiplied, even when a SIM day
     // occupies activity day #14. A SIM day at #14 simply means the next activity
     // is #15 (the 14th-day entitlement is NOT shifted onto a later DUTY).
+    // LAD (Late Arrival Day) is derived, not stored — withDerivedLadDays() inserts each
+    // triggering flight's synthetic LAD entry right after it (see the ONE LAD rule
+    // implementation below, near AIRPORT_TZ) so this stays the ONLY place LAD is counted.
     days = days || rosterData;
     const map = {};
     let counter = 0;
-    days.forEach(d => {
-      if(d.code !== 'DUTY' && d.code !== 'LAYOVER' && d.code !== 'INS' && d.code !== 'SIM') return;
+    withDerivedLadDays(days).forEach(d => {
+      if(d.code !== 'DUTY' && d.code !== 'LAYOVER' && d.code !== 'INS' && d.code !== 'SIM' && d.code !== 'LAD') return;
       if(map[d.date] === undefined){ counter++; map[d.date] = counter; }
     });
     return map;
@@ -1680,6 +1707,16 @@
         });
         html += `<input type="text" class="trip-note-input" data-date="${d.date}" placeholder="Note for this trip (passport, uniform, etc.)" value="${(getTripNote(d.date) || '').replace(/"/g,'&quot;')}" onchange="saveTripNote('${d.date}', this.value)">`;
         html += `</div>`;
+        // LAD — Late Arrival Day. Derived (never stored in rosterData), so it's rendered as a
+        // compact status line right here rather than a new day-group at index i+1 — that keeps
+        // it visibly tied to this flight without disturbing the by-index editing contract
+        // (cancelFlight/removeEntry/showCrewModal/unsched checkboxes all key off the REAL
+        // rosterData index `i`, which must stay untouched). Uses the ONE LAD rule implementation
+        // (deriveLadForDay) — never re-derives >08:00/New-York/TLV here.
+        const lad = deriveLadForDay(d);
+        if(lad){
+          html += `<div class="stub off" style="margin-top:6px;"><span>${lad.label}</span><span class="mono" style="font-size:11px">LAD · ${lad.date}</span></div>`;
+        }
       } else if(d.code === 'CXL'){
         html += `<div class="stub cxl"><span>${d.label || d.code}</span><span class="mono" style="font-size:11px">CXL · 3.00h credit</span></div>`;
       } else if(d.code === 'SBSM' || d.code === 'SBSE' || d.code === 'LSBY' || d.code === 'SSBY'){
@@ -1711,6 +1748,10 @@
       } else if(d.code === 'PM' || d.code === 'MEMO'){
         html += `<div class="stub off"><span>${d.label || d.code}</span><span class="mono" style="font-size:11px">${d.code}</span></div>`;
       } else {
+        // Covers CRST (label "Contract Rest", code "CRST") and any other non-flight status —
+        // a plain rest/status stub, with none of the flight-only controls (see the DUTY branch
+        // above). No dedicated branch needed: CRST is just data (code:'CRST', label:'Contract
+        // Rest') consumed here like any other recognised non-DUTY code.
         html += `<div class="stub off"><span>${d.label || d.code}</span><span class="mono" style="font-size:11px">${d.code}</span></div>`;
       }
       html += `</div>`;
@@ -1766,6 +1807,8 @@
 
   // ---- Available Windows: a flat list of individual free days (not merged ranges) — a crew
   // member picking a day for a private event needs "is THIS day free", not a multi-day span.
+  // CRST is deliberately NOT in this set: contractual post-flight rest is protected rest, not
+  // availability for assignment/replacement — it must never inherit plain OFF's behavior here.
   const AVAILABLE_CODES = new Set(['OFF', 'OFFP', 'ROFF', 'CXL', 'PM', 'MEMO']);
   function computeAvailableDays(){
     return buildCalendarDays()
@@ -1874,13 +1917,29 @@
   }
   const MONTH_NAMES = {'01':'January','02':'February','03':'March','04':'April','05':'May','06':'June','07':'July','08':'August','09':'September','10':'October','11':'November','12':'December'};
 
+  // ONE shared label for a non-flight Calendar/Share cell — both must always agree on what a
+  // day means rather than independently re-deriving it (this is what closed the STAY/CRST/LAD
+  // gaps between renderCalendar and generateFamilyImage). `item` is a buildCalendarDays() entry.
+  function semanticDayLabel(item){
+    if(item.code === 'LAYOVER') return (item.dests && item.dests.length) ? null : 'STAY';
+    if(item.code === 'OFFP') return 'OFF·P';
+    if(item.code === 'ROFF') return 'R.OFF';
+    if(item.code === 'SBSM' || item.code === 'SBSE') return 'SBY';
+    if(item.code === 'LSBY' || item.code === 'SSBY') return 'LSBY';
+    return item.code || null; // OFF, CRST, LAD, SIM, INS, PM, MEMO, CXL, or a verbatim-preserved
+                               // unrecognised status — always the literal code, never blank
+  }
+
   function buildCalendarDays(){
     // Multiple roster rows can share a date (e.g. a PM note plus a DUTY row); pick the most
     // substantive one per date for the calendar cell.
-    const priority = ['DUTY','LAYOVER','SIM','INS','LSBY','SSBY','SBSM','SBSE','OFFP','ROFF','OFF','PM','MEMO','CXL'];
+    const priority = ['DUTY','LAD','LAYOVER','CRST','SIM','INS','LSBY','SSBY','SBSM','SBSE','OFFP','ROFF','OFF','PM','MEMO','CXL'];
     const byDate = {};
     const order = [];
-    rosterData.forEach(d => {
+    // LAD (Late Arrival Day) is derived, never stored — withDerivedLadDays() inserts each
+    // triggering flight's synthetic LAD entry right after it (see the ONE LAD rule, near
+    // AIRPORT_TZ). This is what makes Calendar/Share/Activity-Count agree on LAD automatically.
+    withDerivedLadDays(rosterData).forEach(d => {
       if(!byDate[d.date]){ byDate[d.date] = []; order.push(d.date); }
       byDate[d.date].push(d);
     });
@@ -1933,22 +1992,30 @@
       if(item.code === 'DUTY'){
         cls += ' duty';
         destHtml = item.dests.map(c => `<span class="cal-dest">${getFlag(c)} ${c}</span>`).join('');
+      } else if(item.code === 'LAD'){
+        // Late Arrival Day — a contractual additional Activity Day, not a second flight. Styled
+        // like Duty (it belongs to the preceding NYC->TLV slip) but carries no destination flag.
+        cls += ' duty';
+        destHtml = `<span class="cal-dest" style="color:var(--text-primary)">${semanticDayLabel(item)}</span>`;
       } else if(item.code === 'LAYOVER'){
         cls += ' layover';
-        destHtml = item.dests.map(c => `<span class="cal-dest">${getFlag(c)} ${c}</span>`).join('') || `<span class="cal-dest" style="color:var(--accent-cyan)">STAY</span>`;
+        destHtml = item.dests.map(c => `<span class="cal-dest">${getFlag(c)} ${c}</span>`).join('') || `<span class="cal-dest" style="color:var(--accent-cyan)">${semanticDayLabel(item)}</span>`;
+      } else if(item.code === 'CRST'){
+        // Contract Rest — a rest/status day, styled like Off, never like a flight.
+        cls += ' off';
+        destHtml = `<span class="cal-dest" style="color:var(--accent-cyan)">${semanticDayLabel(item)}</span>`;
       } else if(item.code === 'INS'){
         cls += ' ins';
-        destHtml = `<span class="cal-dest" style="color:var(--text-muted)">INS</span>`;
+        destHtml = `<span class="cal-dest" style="color:var(--text-muted)">${semanticDayLabel(item)}</span>`;
       } else if(item.code === 'SIM'){
         cls += ' ins';
-        destHtml = `<span class="cal-dest" style="color:var(--text-muted)">SIM</span>`;
+        destHtml = `<span class="cal-dest" style="color:var(--text-muted)">${semanticDayLabel(item)}</span>`;
       } else if(item.code === 'SBSM' || item.code === 'SBSE' || item.code === 'LSBY' || item.code === 'SSBY'){
         cls += ' standby';
-        destHtml = `<span class="cal-dest" style="color:var(--accent-cyan)">${(item.code === 'LSBY' || item.code === 'SSBY') ? 'LSBY' : 'SBY'}</span>`;
+        destHtml = `<span class="cal-dest" style="color:var(--accent-cyan)">${semanticDayLabel(item)}</span>`;
       } else if(item.code === 'OFF' || item.code === 'OFFP' || item.code === 'ROFF'){
         cls += ' off';
-        const lbl = item.code === 'OFFP' ? 'OFF·P' : (item.code === 'ROFF' ? 'R.OFF' : 'OFF');
-        destHtml = `<span class="cal-dest" style="color:var(--text-muted)">${lbl}</span>`;
+        destHtml = `<span class="cal-dest" style="color:var(--text-muted)">${semanticDayLabel(item)}</span>`;
       } else {
         cls += ' off';
       }
@@ -3023,6 +3090,79 @@
     return {block: (arrUTC - depUTC) / 60, time: minutesToTimeStr(depUTC) + ' – ' + minutesToTimeStr(arrUTC)};
   }
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  LAD — Late Arrival Day (contractual additional Activity Day)
+  //
+  //  Rule: a flight whose origin belongs to the New York airport group and whose destination is
+  //  TLV, landing strictly AFTER 08:00 local Tel Aviv time, earns one additional contractual
+  //  Activity Day on the CALENDAR DATE of arrival. 08:00 exactly does NOT qualify. It is not a
+  //  flight (no leg/report/debrief/block of its own) and is never persisted into rosterData —
+  //  it is derived fresh from the flight day on every read via withDerivedLadDays(), which is
+  //  the ONLY function every consumer (Roster, Calendar, Share, Activity Count) calls. There must
+  //  never be a second implementation of the >08:00 / New-York / TLV check anywhere else.
+  //
+  //  New York is an explicit, maintainable airport GROUP — never matched on display text like
+  //  "New York". Today's roster data only ever produces JFK; EWR is listed as the same
+  //  contractual group so a future roster using it needs no rule change, only a set update.
+  // ══════════════════════════════════════════════════════════════════════════
+  const NYC_AIRPORTS = new Set(['JFK', 'EWR']); // the New York contractual airport group — extend here, never by matching display text
+  const LAD_TLV_LOCAL_CUTOFF_MIN = 8 * 60; // 08:00 — strictly AFTER this qualifies; exactly 08:00 does not
+
+  // The reverse of zonedWallTimeToUtcMs (above): a UTC instant -> that IANA zone's wall-clock
+  // date/time, built on the same tzOffsetMinutes primitive. Used ONLY by the LAD rule — every
+  // other time conversion in the app already goes the other direction (wall -> UTC).
+  function utcToZonedWallTime(utcMs, timeZone){
+    const off = tzOffsetMinutes(utcMs, timeZone);
+    if(off == null) return null;
+    const d = new Date(utcMs + off * 60000);
+    return { y: d.getUTCFullYear(), mo: d.getUTCMonth() + 1, d: d.getUTCDate(), hh: d.getUTCHours(), mm: d.getUTCMinutes() };
+  }
+
+  // One DUTY day -> its LAD entry, or null. Reads the leg's already-computed UTC time
+  // (leg.time / leg.timeBasis==='utc') — the SAME canonical, engine-trusted representation every
+  // other business rule uses (leg.localTime, where present, is a display-only overlay and is
+  // deliberately NOT read here) — so this introduces no second time-conversion path.
+  function deriveLadForDay(d){
+    if(!d || d.code !== 'DUTY' || !d.legs || !d.legs.length) return null;
+    const leg = d.legs[d.legs.length - 1];
+    if(!leg || leg.to !== 'TLV' || !NYC_AIRPORTS.has(leg.from)) return null;
+    if(leg.timeBasis !== 'utc' || !leg.time) return null; // no reliable UTC time -> never guess
+    const m = /(\d{1,2}:\d{2})\s*[–-]\s*(\d{1,2}:\d{2})(⁺[¹²]|\+[12])?\s*$/.exec(String(leg.time).trim());
+    if(!m) return null;
+    if(!/^\d{2}\/\d{2}$/.test(d.date || '')) return null;
+    const year = dayYear(d);
+    const depDay = parseInt(d.date.slice(0, 2), 10), depMonth = parseInt(d.date.slice(3), 10);
+    const [ah, am] = m[2].split(':').map(Number);
+    const dayOffset = m[3] ? (/[²2]/.test(m[3]) ? 2 : 1) : 0;
+    const arrUtcMs = Date.UTC(year, depMonth - 1, depDay + dayOffset, ah, am);
+    const wall = utcToZonedWallTime(arrUtcMs, AIRPORT_TZ.TLV);
+    if(!wall) return null;
+    if(wall.hh * 60 + wall.mm <= LAD_TLV_LOCAL_CUTOFF_MIN) return null; // 08:00 exactly does not qualify
+    const arrDow = WEEK[new Date(Date.UTC(wall.y, wall.mo - 1, wall.d)).getUTCDay()];
+    return {
+      date: String(wall.d).padStart(2, '0') + '/' + String(wall.mo).padStart(2, '0'),
+      year: wall.y, day: arrDow, code: 'LAD', label: 'Late Arrival Day',
+      linkedDate: d.date, linkedFlightNumber: leg.flt || undefined,
+    };
+  }
+
+  // `days` (any chronological day-array — live rosterData, an uploaded actual-times file, or a
+  // What-If copy) with each triggering flight's LAD entry inserted immediately after it. Never
+  // mutates or persists — a pure read-time view. Inserting right after the flight preserves
+  // chronological order (a LAD's date is always its flight's date + 1-2 calendar days, and
+  // rosterData is already chronological), which callers that render a grid (Calendar/Share) rely
+  // on as much as the ones that just count.
+  function withDerivedLadDays(days){
+    days = days || rosterData;
+    const out = [];
+    days.forEach(d => {
+      out.push(d);
+      const lad = deriveLadForDay(d);
+      if(lad) out.push(lad);
+    });
+    return out;
+  }
+
   async function handleCsvUpload(e){
     const file = e.target.files[0];
     if(!file) return;
@@ -3136,12 +3276,38 @@
       const detailsCell = cols.details !== undefined ? String(row[cols.details] || '').trim() : '';
       if(!dutiesCell) continue;
 
+      // AIMS marks a recently-changed/inserted row with a leading '>' (e.g. ">OFF") — strip it
+      // before matching, same as the calendar-sync parser (parseAimsCalendarEvent) already does.
+      // Matching the UNSTRIPPED text here was the root cause of a real bug: ">OFF" never matched
+      // any DUTY_CODE_MAP key, so the row fell through to "treat as a flight" below and produced
+      // a phantom "??? -> ???" duty leg — see the route-hint guard further down for the other
+      // half of that fix.
+      const strippedDuties = dutiesCell.replace(/^>/, '').trim();
       let matchedCode = null;
       for(const c of Object.keys(DUTY_CODE_MAP)){
-        if(new RegExp('^' + c + '\\b').test(dutiesCell)){ matchedCode = c; break; }
+        if(new RegExp('^' + c + '\\b').test(strippedDuties)){ matchedCode = c; break; }
       }
       if(matchedCode){
-        days.push({date: shortDate, year: parseInt(dateMatch[3], 10), day: dow, code: matchedCode, label: detailsCell || DUTY_CODE_MAP[matchedCode]});
+        // CRST — contractual post-flight rest. Only this specific AIMS text pattern is
+        // reclassified off of plain OFF; every other matched code keeps its normal behavior.
+        if(matchedCode === 'OFF' && isCrstFreeText(detailsCell)){
+          days.push({date: shortDate, year: parseInt(dateMatch[3], 10), day: dow, code: 'CRST', label: DUTY_CODE_MAP.CRST});
+        } else {
+          days.push({date: shortDate, year: parseInt(dateMatch[3], 10), day: dow, code: matchedCode, label: detailsCell || DUTY_CODE_MAP[matchedCode]});
+        }
+        continue;
+      }
+
+      // Not a known status code. Only treat this as a DUTY (flight) row when there's actual
+      // route evidence (an "AAA-BBB" pattern in Details, or a digit in Duties) — a bare
+      // unrecognized status/activity code this app doesn't know yet is preserved verbatim
+      // instead of being guessed as a flight (the SAME never-guess rule the multi-sheet
+      // Schedule importer already applies in parseScheduleSheetRows). This is what stops a
+      // free-text label containing a "/" (e.g. "Post-flight rest/day off") from being misread
+      // as multiple route lines when it isn't actually a route at all.
+      const hasRouteHint = /[A-Za-z]{3}\s*-\s*[A-Za-z]{3}/.test(detailsCell) || /\d/.test(dutiesCell);
+      if(!hasRouteHint){
+        days.push({date: shortDate, year: parseInt(dateMatch[3], 10), day: dow, code: strippedDuties || dutiesCell, label: detailsCell || dutiesCell});
         continue;
       }
 
@@ -3588,7 +3754,7 @@
    * @property {string} [sourceRawHash]             //   cheap content hash of the raw source text (change detection)
    */
 
-  const NORMALIZED_ACTIVITY_TYPES = ['FLIGHT','OFF','ROFF','OFFR','SBY','SIM','TRAINING','MEDICAL','MIL','LEAVE','DEADHEAD','UNKNOWN'];
+  const NORMALIZED_ACTIVITY_TYPES = ['FLIGHT','OFF','ROFF','OFFR','CRST','SBY','SIM','TRAINING','MEDICAL','MIL','LEAVE','DEADHEAD','UNKNOWN'];
   const CONFIDENCE_GREEN = 0.90;
   const CONFIDENCE_YELLOW = 0.70;
 
@@ -3787,6 +3953,10 @@
   // ---- normalized  ->  canonical rosterData ----------------------------
   function _isoToDDMM(iso){ const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(String(iso || '')); return m ? { date: m[3] + '/' + m[2], year: parseInt(m[1], 10), iso } : null; }
   function _normTypeToCode(a){
+    // CRST must win over the raw dutyCode shortcut below: its source dutyCode is still the plain
+    // 'OFF' AIMS text (see aimsExtractionToNormalized) — activityType is what carries the CRST
+    // vs. plain-OFF distinction, so it has to be checked first here.
+    if(a.activityType === 'CRST') return 'CRST';
     if(a.dutyCode && DUTY_CODE_MAP[a.dutyCode]) return a.dutyCode;
     switch(a.activityType){
       case 'FLIGHT': case 'DEADHEAD': return 'DUTY';
@@ -3934,6 +4104,7 @@
     if(code === 'OFF') return 'OFF';
     if(code === 'ROFF') return 'ROFF';
     if(code === 'OFFP') return 'OFFR';
+    if(code === 'CRST') return 'CRST';
     if(code === 'SIM') return 'SIM';
     if(code === 'INS' || code === 'RTNH') return 'TRAINING';   // P6 (C4b-4b): RTNH = "Remote training (half day)" (airline-verified). Classification only — no credit/FTL rule implied.
     if(code === 'SBSM' || code === 'SBSE' || code === 'LSBY' || code === 'SSBY') return 'SBY';
@@ -3992,7 +4163,10 @@
       const sector = /^([A-Za-z]{3})\s*[-–]\s*([A-Za-z]{3})$/.exec(String(r.sector || '').trim());
       const isFlight = /^\d{1,4}$/.test(code) || (!!sector && !DUTY_CODE_MAP[code]);
       a.activityType = isFlight ? 'FLIGHT'
-        : /^R?OFF$/.test(code) ? (code === 'ROFF' ? 'ROFF' : 'OFF')
+        // CRST — contractual post-flight rest. Only THIS specific AIMS text pattern is
+        // reclassified off of plain OFF; a bare OFF/ROFF with no matching description stays
+        // whatever it already was (never assume every '>OFF' means CRST).
+        : /^R?OFF$/.test(code) ? (code === 'ROFF' ? 'ROFF' : (isCrstFreeText(r.description) ? 'CRST' : 'OFF'))
         : /^OFF[RP]$/.test(code) ? 'OFFR'
         : /^L?S?SBY$/.test(code) || /SBY$/.test(code) ? 'SBY'
         : code === 'SIM' ? 'SIM'
@@ -4020,7 +4194,10 @@
         if(a.utcDepartureTime) reconcileCalendarFlightTimes(a);
       } else {
         if(code) a.dutyCode = code;                       // keep the source code (LSBY vs SSBY etc.)
-        if(r.description || DUTY_CODE_MAP[code]) a.label = r.description || DUTY_CODE_MAP[code];
+        if(a.activityType === 'CRST') a.label = DUTY_CODE_MAP.CRST; // canonical "Contract Rest" —
+          // the raw AIMS text ("Post-flight rest/day off") stays diagnosable via rawText, it's
+          // just no longer the PRIMARY display label now that CRST is a recognised type.
+        else if(r.description || DUTY_CODE_MAP[code]) a.label = r.description || DUTY_CODE_MAP[code];
       }
       // C4b — source identity (index-aligned parallel array from gcalEventsToAimsExtraction).
       const _sm = ex._sourceMeta && ex._sourceMeta[_ri];
