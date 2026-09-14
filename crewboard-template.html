@@ -570,6 +570,14 @@
         <div class="brk-row"><span>Trip Time <span class="mono hint">(3h credit / 24h qualifying non-block time)</span></span><span class="val" id="brk-trip-time">0:00</span></div>
       </div>
       <div class="mono hint" id="trip-time-incomplete-notice" style="margin:-4px 0 6px; color:var(--accent-amber);" hidden></div>
+
+      <div class="collapse-section" data-collapse-id="triptime">
+        <button type="button" class="collapse-header" aria-expanded="true" onclick="toggleCollapse(this)"><span>Trip Time — by rotation <span class="mono hint hint--plain">(audit detail)</span></span><span class="collapse-chevron" aria-hidden="true">▾</span></button>
+        <div class="collapse-body">
+          <div id="trip-time-rotations"></div>
+        </div>
+      </div>
+
       <div class="breakdown" style="margin-top:0;">
         <div class="brk-row"><span>Total credit hours</span><span class="val" id="brk-credit-total">0.00h</span></div>
       </div>
@@ -2269,7 +2277,7 @@
   }
   (function initCollapseState(){
     const state = getCollapseState();
-    const DEFAULT_COLLAPSED = {nfa:false, ground:true, rates:true, reconcile:true, annual:true, howpay:true};
+    const DEFAULT_COLLAPSED = {nfa:false, ground:true, rates:true, reconcile:true, annual:true, howpay:true, triptime:true};
     document.querySelectorAll('.collapse-section').forEach(sec => {
       const id = sec.getAttribute('data-collapse-id');
       const collapsed = state[id] !== undefined ? state[id] : DEFAULT_COLLAPSED[id];
@@ -6019,6 +6027,23 @@
     if(!isNaN(actual)) return actual;
     return legArrUtcMs(d, leg);
   }
+  // A UTC instant -> the calendar date it falls on AT the given station, local time. Same
+  // two-tier resolution as dutyReportUtcMs (IANA zone first, Settings "Airport UTC Offsets"
+  // fallback). Used only for DISPLAY (e.g. the TRIP TIME by-rotation breakdown's end date) — a
+  // rotation's own duty-day objects are dated by REPORT, so a duty whose ON BLOCK lands after
+  // local midnight needs this to show the real arrival calendar day, not the report day.
+  function utcMsToStationDate(utcMs, station){
+    if(utcMs == null || !station) return null;
+    const tz = AIRPORT_TZ[station];
+    if(tz){
+      const w = utcToZonedWallTime(utcMs, tz);
+      return w ? { yr: w.y, mm: w.mo, dd: w.d } : null;
+    }
+    const fixed = getAirportOffsets()[station];
+    if(fixed == null) return null;
+    const d = new Date(utcMs + fixed * 3600000);
+    return { yr: d.getUTCFullYear(), mm: d.getUTCMonth() + 1, dd: d.getUTCDate() };
+  }
 
   // Groups rosterData's DUTY days into trip/rotations: a rotation starts at a
   // duty whose FIRST leg departs home, and keeps extending — through however
@@ -6085,36 +6110,89 @@
   // BLOCK time — those contribute to incompleteCount instead, so the UI can
   // say "N segment(s) missing required timing data" rather than silently
   // understate (or invent) the figure.
+  //
+  // `rows` / `incompleteRows` carry the SAME per-rotation numbers this function already computes
+  // for the total — the by-rotation Salary UI breakdown reads these directly rather than
+  // re-deriving anything, so there is only ever ONE TRIP TIME calculation path.
   function computeTripTimeCredit(days, maxDateObj){
     const rotations = tripTimeRotations(days, maxDateObj);
     const estimates = getForecastEstimates();
     let creditHours = 0, incompleteCount = 0;
-    const rows = [];
+    const rows = [], incompleteRows = [];
+    const incomplete = (r, reason) => {
+      incompleteCount++;
+      incompleteRows.push({ startDate: r.startDay.date, endDate: r.endDay.date, awayStations: awayStationsForLegs(r.legs), reason });
+    };
     rotations.forEach(r => {
-      if(!r.complete){ incompleteCount++; return; }
+      if(!r.complete){ incomplete(r, r.missingPredecessor ? 'missing outbound leg — starts outside the loaded roster' : 'no return to home found in the loaded roster'); return; }
       const reportMs = dutyReportUtcMs(r.startDay);
-      if(reportMs == null){ incompleteCount++; return; }
+      if(reportMs == null){ incomplete(r, 'missing REPORT time, or unknown timezone for the reporting station'); return; }
       const lastLeg = r.legs[r.legs.length - 1];
       const onBlockMs = legOnBlockUtcMs(r.endDay, lastLeg);
-      if(onBlockMs == null){ incompleteCount++; return; }
+      if(onBlockMs == null){ incomplete(r, 'missing ON BLOCK time for the final leg'); return; }
       let totalBlock = 0, blockOk = true;
       for(const l of r.legs){
         const resolved = resolveLegBlock(l, estimates, { flightStatus: l.flightStatus });
         if(resolved.block == null){ blockOk = false; break; }
         totalBlock += resolved.block;
       }
-      if(!blockOk){ incompleteCount++; return; }
+      if(!blockOk){ incomplete(r, 'missing BLOCK time for one or more legs'); return; }
       const elapsedHours = (onBlockMs - reportMs) / 3600000;
       const qualifying = elapsedHours - totalBlock;
       // block >= elapsed span is internally inconsistent data (BLOCK can never legitimately
       // exceed real elapsed time) — contribute 0, never negative credit, but flag it as a
       // data-quality issue rather than silently treating it as "nothing owed".
-      if(qualifying <= 0){ incompleteCount++; return; }
+      if(qualifying <= 0){ incomplete(r, 'BLOCK time meets or exceeds the elapsed span (data inconsistency)'); return; }
       const hrs = qualifying * TRIP_TIME_CREDIT_PER_HOUR;
       creditHours += hrs;
-      rows.push({ startDate: r.startDay.date, endDate: r.endDay.date, qualifyingHours: qualifying, creditHours: hrs });
+      // Display end date = the real ON BLOCK arrival calendar day at the arrival station, not the
+      // final duty's own (REPORT-dated) `.date` field — a duty that lands after local midnight
+      // must show the day it actually landed, matching what the pilot lived through.
+      const arrDate = utcMsToStationDate(onBlockMs, String(lastLeg.to || '').trim().toUpperCase());
+      const endDate = arrDate ? (String(arrDate.dd).padStart(2, '0') + '/' + String(arrDate.mm).padStart(2, '0')) : r.endDay.date;
+      rows.push({
+        startDate: r.startDay.date, endDate,
+        awayStations: awayStationsForLegs(r.legs),
+        elapsedHours, totalBlockHours: totalBlock,
+        qualifyingHours: qualifying, creditHours: hrs,
+      });
     });
-    return { creditHours, incompleteCount, rotationCount: rotations.length, rows };
+    return { creditHours, incompleteCount, rotationCount: rotations.length, rows, incompleteRows };
+  }
+
+  function tripTimeShortDate(ddmm){
+    const parts = String(ddmm || '').split('/');
+    const dd = parts[0], mm = parts[1];
+    const monthName = MONTH_NAMES[mm];
+    return dd + (monthName ? ' ' + monthName.slice(0, 3) : '');
+  }
+
+  // Renders the SAME rows/incompleteRows a `computeTripTimeCredit()` call already produced — never
+  // recomputes TRIP TIME, so the by-rotation audit view can never disagree with the total it's
+  // auditing. An incomplete rotation always shows as incomplete with its reason; it never falls
+  // back to a fabricated number.
+  function formatTripTimeRotationsHtml(tripTime){
+    if(!tripTime || (tripTime.rows.length === 0 && tripTime.incompleteRows.length === 0)){
+      return '<div class="mono hint">No rotations in the loaded roster yet.</div>';
+    }
+    const rowHtml = (r) => {
+      const range = tripTimeShortDate(r.startDate) + ' – ' + tripTimeShortDate(r.endDate);
+      const stations = (r.awayStations && r.awayStations.length) ? r.awayStations.join('/') : '—';
+      return '<div class="mono hint hint--plain" style="padding:8px 0; border-bottom:1px solid var(--divider);">'
+        + '<div style="color:var(--text-primary);">' + range + ' · ' + stations + '</div>'
+        + 'Elapsed ' + hhmm(Math.round(r.elapsedHours * 60)) + ' · Block ' + hhmm(Math.round(r.totalBlockHours * 60)) + '<br>'
+        + 'Qualifying ' + hhmm(Math.round(r.qualifyingHours * 60)) + ' · TRIP TIME ' + hhmm(Math.round(r.creditHours * 60))
+        + '</div>';
+    };
+    const incompleteHtml = (r) => {
+      const range = tripTimeShortDate(r.startDate) + ' – ' + tripTimeShortDate(r.endDate);
+      const stations = (r.awayStations && r.awayStations.length) ? r.awayStations.join('/') : '—';
+      return '<div class="mono hint hint--plain" style="padding:8px 0; border-bottom:1px solid var(--divider);">'
+        + '<div style="color:var(--accent-amber);">' + range + ' · ' + stations + ' — Incomplete</div>'
+        + r.reason
+        + '</div>';
+    };
+    return tripTime.rows.map(rowHtml).join('') + tripTime.incompleteRows.map(incompleteHtml).join('');
   }
 
   function calcCreditBreakdown(){
@@ -6646,6 +6724,8 @@
       tripTimeNoticeEl.hidden = tripTime.incompleteCount === 0;
       if(tripTime.incompleteCount > 0) tripTimeNoticeEl.textContent = 'TRIP TIME may be understated: ' + tripTime.incompleteCount + ' trip/layover segment(s) are missing required timing data.';
     }
+    const tripTimeRotationsEl = document.getElementById('trip-time-rotations');
+    if(tripTimeRotationsEl) tripTimeRotationsEl.innerHTML = formatTripTimeRotationsHtml(tripTime);
     document.getElementById('brk-credit-total').textContent = totalCreditHours.toFixed(2) + 'h';
     document.getElementById('brk-total-incentives').textContent = totalIncentives.toFixed(2) + 'h';
     document.getElementById('lbl-flightdays-1').textContent = transportUnits;
