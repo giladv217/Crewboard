@@ -1414,6 +1414,56 @@
     }
   })();
 
+  // ══════════════════════════════════════════════════════════════════════════
+  //  PAYROLL ACTUAL persistence (Phase 1) — a completely separate dataset from
+  //  rosterData. rosterData/leg.block remain Predicted, exactly as before; this
+  //  never mutates them, never merges into them, and no existing calculation
+  //  (Shabbat, TRIP TIME, Completion, Salary) reads from this structure.
+  //  Same defensive load pattern as restoreSavedRoster() above: any failure at
+  //  any step (storage access, JSON parse, schema validation) leaves this at
+  //  its empty default and never affects rosterData or app startup.
+  // ══════════════════════════════════════════════════════════════════════════
+  const PAYROLL_ACTUALS_STORE_KEY = 'crewboard-payroll-actuals';
+  function validatePayrollActualsShape(obj){
+    return !!obj && typeof obj === 'object' && obj.version === 1
+      && !!obj.periods && typeof obj.periods === 'object' && !Array.isArray(obj.periods);
+  }
+  // Per-period validation, deliberately separate from the whole-structure check above — one
+  // corrupt period must never discard the others (approved requirement).
+  function validatePayrollPeriodEntry(p){
+    return !!p && typeof p === 'object'
+      && typeof p.periodKey === 'string' && /^\d{4}-\d{2}$/.test(p.periodKey)
+      && Array.isArray(p.days) && p.days.length <= 400 // generous sanity cap, corruption protection only — not a business rule
+      && (p.dutyTotals === undefined || p.dutyTotals === null || Array.isArray(p.dutyTotals))
+      && (p.pilotSummary === undefined || p.pilotSummary === null || typeof p.pilotSummary === 'object');
+  }
+  let payrollActuals = { version: 1, periods: {} };
+  function savePayrollActual(periodKey, periodData){
+    try {
+      let store;
+      try { store = JSON.parse(localStorage.getItem(PAYROLL_ACTUALS_STORE_KEY) || 'null'); } catch(e){ store = null; }
+      if(!validatePayrollActualsShape(store)) store = { version: 1, periods: {} };
+      store.periods[periodKey] = periodData;
+      localStorage.setItem(PAYROLL_ACTUALS_STORE_KEY, JSON.stringify(store));
+      payrollActuals = store;
+      return true;
+    } catch(e){ return false; }
+  }
+  (function restorePayrollActuals(){
+    let raw;
+    try { raw = localStorage.getItem(PAYROLL_ACTUALS_STORE_KEY); } catch(e){ return; }
+    if(!raw) return;
+    let parsed;
+    try { parsed = JSON.parse(raw); } catch(e){ return; }
+    if(!validatePayrollActualsShape(parsed)) return;
+    const cleanPeriods = {};
+    Object.keys(parsed.periods).forEach(key => {
+      const p = parsed.periods[key];
+      if(validatePayrollPeriodEntry(p)) cleanPeriods[key] = p; // else: drop only this one period, keep the rest
+    });
+    payrollActuals = { version: 1, periods: cleanPeriods };
+  })();
+
   // ---- Shabbat window auto-detection ----
   // Assumes leg/report times are UTC (Israel local = UTC+3). A leg is flagged if either:
   // (a) its landing (arrival) falls on Friday after 19:00 Israel time, or
@@ -6462,6 +6512,113 @@
     return {bt, tt, completion, incentiveBT, incentivePayment, totalPayment, transportDays, transportPay, perDiemDays, perDiemPay};
   }
 
+  // ---- Payroll period identity (Phase 1 persistence) --------------------------------------
+  // The payroll period is NOT the calendar range of activity dates in the file — confirmed
+  // against a real August 2026 workbook, where CurrentDataOps rows dated 22/07/2026 carry
+  // SalaryMonth=8/Year=2026 (the period runs 21/07-20/08, per Report Pilot's own "Salary Month
+  // Start/End Date" fields, not the calendar month). Activity dates must NEVER determine
+  // periodKey — see readReportPilotPeriodFields/currentSheetPeriodKeySet/
+  // derivePayrollPeriodIdentity below, none of which reads a leg's own date for this purpose.
+
+  // Report Pilot's own authoritative month + salary-period start/end fields — the primary
+  // period-identity source when this sheet is present. Reuses excelDateToDDMM/excelDateYear
+  // (already correct for the Excel date-serial rounding these cells need) rather than a new
+  // date-parsing path.
+  function readReportPilotPeriodFields(wb){
+    if(!wb.Sheets['Report Pilot']) return null;
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets['Report Pilot'], {header: 1, defval: null});
+    const monthVal = findRowValue(rows, 'חודש');
+    const monthDD = excelDateToDDMM(monthVal), monthYear = excelDateYear(monthVal);
+    if(monthDD == null || monthYear == null) return null; // no usable month field -> caller falls back
+    const startVal = findRowValue(rows, 'תאריך תחילת חודש שכר');
+    const endVal = findRowValue(rows, 'תאריך סיום חודש שכר');
+    const startDD = excelDateToDDMM(startVal), startYear = excelDateYear(startVal);
+    const endDD = excelDateToDDMM(endVal), endYear = excelDateYear(endVal);
+    return {
+      periodKey: String(monthYear) + '-' + monthDD.slice(3), // 'DD/MM' -> take 'MM'
+      periodStartDate: (startDD && startYear) ? (startDD + '/' + startYear) : null,
+      periodEndDate: (endDD && endYear) ? (endDD + '/' + endYear) : null,
+    };
+  }
+  // Fallback / cross-validation source: every CurrentData* row already carries its own
+  // SalaryMonth (or Month) + Year columns, independent of that row's own activity date.
+  // readAimsSheet() already captures every header into each row object, so these are read
+  // directly here without touching parseAimsWorkbook() at all.
+  function currentSheetPeriodKeySet(wb){
+    const keys = new Set();
+    ['CurrentDataOps', 'CurrentDataDuties', 'CurrentDataNFA'].forEach(sheetName => {
+      readAimsSheet(wb, sheetName, 1).forEach(r => {
+        const m = r.SalaryMonth != null ? r.SalaryMonth : r.Month;
+        const y = r.Year;
+        if(m != null && y != null) keys.add(String(y) + '-' + String(m).padStart(2, '0'));
+      });
+    });
+    return keys;
+  }
+  // Orchestrates the source hierarchy: Report Pilot (primary) cross-validated against
+  // CurrentData* sheets; CurrentData* consensus (fallback) if Report Pilot is absent; explicit
+  // conflict (never guessed) if either source disagrees with itself or the other. Never falls
+  // back to activity dates.
+  function derivePayrollPeriodIdentity(wb){
+    const rp = readReportPilotPeriodFields(wb);
+    const currentKeys = currentSheetPeriodKeySet(wb);
+    if(rp){
+      if(currentKeys.size > 0 && !(currentKeys.size === 1 && currentKeys.has(rp.periodKey))){
+        return { ok: false, reason: 'Report Pilot says ' + rp.periodKey + ' but the operational data sheets disagree (' + [...currentKeys].join(', ') + ')' };
+      }
+      return { ok: true, periodKey: rp.periodKey, periodKeySource: 'report-pilot', periodStartDate: rp.periodStartDate, periodEndDate: rp.periodEndDate };
+    }
+    if(currentKeys.size === 1){
+      return { ok: true, periodKey: [...currentKeys][0], periodKeySource: 'current-sheets', periodStartDate: null, periodEndDate: null };
+    }
+    if(currentKeys.size === 0) return { ok: false, reason: 'no payroll-period fields found in this workbook' };
+    return { ok: false, reason: 'operational data sheets disagree on payroll period (' + [...currentKeys].join(', ') + ')' };
+  }
+  // 'DD/MM/YYYY' -> a comparable UTC Date, or null. Used only for the completeness comparison
+  // below, never for periodKey itself.
+  function ddmmyyyyToUtcDate(s){
+    const m = s && /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(s);
+    return m ? new Date(Date.UTC(+m[3], +m[2] - 1, +m[1])) : null;
+  }
+  // The actual activity-date span present in this import — descriptive metadata only, never
+  // period identity, and (per the completeness policy) never alone treated as proof of
+  // completeness either.
+  function activityDateRangeFromDays(days){
+    let min = null, max = null;
+    (days || []).forEach(d => {
+      const dObj = buildDateObj(d.date, '12:00', d.year);
+      if(!dObj) return;
+      if(!min || dObj < min) min = dObj;
+      if(!max || dObj > max) max = dObj;
+    });
+    const fmt = dObj => dObj ? (String(dObj.getDate()).padStart(2, '0') + '/' + String(dObj.getMonth() + 1).padStart(2, '0') + '/' + dObj.getFullYear()) : null;
+    return { activityMinDate: fmt(min), activityMaxDate: fmt(max) };
+  }
+  // Replacement-safety policy (approved): hasPilotSummary is the primary completeness signal.
+  // Only when NEITHER side has it does this fall back to a strict activity-coverage superset
+  // check — and even then, only as a demonstrable superset, never a guess. No case here ever
+  // silently downgrades an existing period.
+  function comparePayrollPeriodCompleteness(existing, incoming){
+    if(!existing) return 'replace';
+    const exFinal = !!existing.hasPilotSummary, inFinal = !!incoming.hasPilotSummary;
+    if(inFinal && !exFinal) return 'replace';   // A
+    if(!inFinal && exFinal) return 'reject';    // B
+    if(inFinal && exFinal) return 'replace';    // C
+    // D: neither final -- replace only if incoming's activity coverage is a STRICT superset.
+    const exMin = ddmmyyyyToUtcDate(existing.activityMinDate), exMax = ddmmyyyyToUtcDate(existing.activityMaxDate);
+    const inMin = ddmmyyyyToUtcDate(incoming.activityMinDate), inMax = ddmmyyyyToUtcDate(incoming.activityMaxDate);
+    if(exMin && exMax && inMin && inMax && inMin <= exMin && inMax >= exMax
+       && (inMin < exMin || inMax > exMax || (incoming.rowCount || 0) > (existing.rowCount || 0))){
+      return 'replace';
+    }
+    return 'reject'; // not demonstrably safe -- keep the existing period intact
+  }
+  // The workbook's own generation timestamp (Excel document properties), if present — a
+  // diagnostic-only signal (never proof of completeness by itself, per the approved policy).
+  function payrollWorkbookGeneratedAt(wb){
+    return (wb.Props && wb.Props.CreatedDate instanceof Date && !isNaN(wb.Props.CreatedDate)) ? wb.Props.CreatedDate.toISOString() : null;
+  }
+
   async function handleReconFileUpload(e){
     const file = e.target.files[0];
     if(!file) return;
@@ -6493,6 +6650,41 @@
         extraNote += ' Actual Trip Time comes from Report NFA and Completion Hours from CurrentDataDuties — both authoritative, not recomputed here.';
         if(pilotSummary && pilotSummary.totalPayment != null) extraNote += ' Actual Total Income is read directly from Report Pilot\'s own bottom-line figure, not reconstructed from individual flights.';
         if(aims.skippedDurationRows) extraNote += ' ' + aims.skippedDurationRows + ' duration value(s) in the file looked implausible and were skipped rather than trusted — send the file to me in chat if the totals below still look off.';
+
+        // ---- Phase 1: persist this Payroll Actual dataset, separately from rosterData ----
+        // Never touches rosterData/leg.block; a failure here never breaks the existing
+        // Predicted-vs-Actual comparison below, which continues to use `aims` directly either way.
+        const periodIdentity = derivePayrollPeriodIdentity(wb);
+        if(periodIdentity.ok){
+          const { activityMinDate, activityMaxDate } = activityDateRangeFromDays(aims.days);
+          const generatedAt = payrollWorkbookGeneratedAt(wb);
+          const periodEndObj = ddmmyyyyToUtcDate(periodIdentity.periodEndDate);
+          const generatedAfterPeriodEnd = (generatedAt && periodEndObj) ? (new Date(generatedAt) > periodEndObj) : null;
+          const incoming = {
+            periodKey: periodIdentity.periodKey,
+            periodKeySource: periodIdentity.periodKeySource,
+            periodStartDate: periodIdentity.periodStartDate,
+            periodEndDate: periodIdentity.periodEndDate,
+            activityMinDate, activityMaxDate,
+            hasPilotSummary: !!(pilotSummary && pilotSummary.totalPayment != null),
+            rowCount: aims.days.length,
+            generatedAt, generatedAfterPeriodEnd,
+            importedAt: new Date().toISOString(),
+            sourceFileName: file.name || null,
+            days: aims.days, dutyTotals: aims.dutyTotals, pilotSummary: aims.pilotSummary,
+            skippedDurationRows: aims.skippedDurationRows, extraNote,
+          };
+          const existingPeriod = payrollActuals.periods[incoming.periodKey];
+          const verdict = comparePayrollPeriodCompleteness(existingPeriod, incoming);
+          if(verdict === 'replace'){
+            savePayrollActual(incoming.periodKey, incoming);
+            extraNote += ' Saved as your persisted Payroll Actual for ' + incoming.periodKey + ' — it\'ll still be here next time you open CrewBoard.';
+          } else {
+            extraNote += ' Kept your existing persisted Payroll Actual for ' + incoming.periodKey + ' — this file looked no more complete, so nothing was overwritten.';
+          }
+        } else {
+          extraNote += ' Could not reliably determine this file\'s payroll period (' + periodIdentity.reason + ') — not saved for next time, but the comparison below still uses this file for this session.';
+        }
       } else {
         const sheet = wb.Sheets[wb.SheetNames[0]];
         const rows = XLSX.utils.sheet_to_json(sheet, {header: 1, defval: '', raw: false});
