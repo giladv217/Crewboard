@@ -1941,6 +1941,34 @@
                                // unrecognised status — always the literal code, never blank
   }
 
+  // ONE shared AWAY STATION resolver for Calendar + Share — the meaningful non-home airport(s)
+  // a duty day's legs actually involve, NOT just "whatever a leg's `to` happens to be". Built on
+  // splitIntoRoundTripSegments (the SAME trip-grouping the salary engine already uses for
+  // per-diem/completion minimums), so it's not a second, independent notion of "trip":
+  //   TLV -> JFK            : away = [JFK]  (outbound leg's `to`)
+  //   JFK -> TLV             : away = [JFK]  (inbound leg's `from` — this is the fix: the old
+  //                            code only ever looked at `.to`, so an inbound leg whose only `to`
+  //                            IS home resolved to nothing, rendering an orange Duty cell with no
+  //                            destination text at all)
+  //   TLV -> PFO -> TLV       : away = [PFO]  (one round-trip segment, one away station)
+  //   TLV->PFO->TLV->ATH->TLV : away = [PFO, ATH]  (two segments -> both legitimate away stations
+  //                            kept, never collapsed to one)
+  // Never infers an airport that isn't actually on a leg — a home-to-home leg (from===to===home)
+  // contributes nothing.
+  function awayStationsForLegs(legs){
+    const home = getHomeBase();
+    const seen = new Set();
+    const stations = [];
+    splitIntoRoundTripSegments(legs || []).forEach(segment => {
+      segment.forEach(l => {
+        [l.from, l.to].forEach(code => {
+          if(code && code !== home && !seen.has(code)){ seen.add(code); stations.push(code); }
+        });
+      });
+    });
+    return stations;
+  }
+
   function buildCalendarDays(){
     // Multiple roster rows can share a date (e.g. a PM note plus a DUTY row); pick the most
     // substantive one per date for the calendar cell.
@@ -1959,9 +1987,7 @@
       const chosen = entries[0];
       let dests = [];
       if(chosen.code === 'DUTY' && chosen.legs){
-        const seen = new Set();
-        const _home = getHomeBase();
-        chosen.legs.forEach(l => { if(l.to && l.to !== _home && !seen.has(l.to)){ seen.add(l.to); dests.push(l.to); } });
+        dests = awayStationsForLegs(chosen.legs);
       } else if(chosen.code === 'LAYOVER'){
         const c = extractDestCode(chosen.label);
         if(c) dests.push(c);
