@@ -1439,6 +1439,7 @@
   }
   let payrollActuals = { version: 1, periods: {} };
   function savePayrollActual(periodKey, periodData){
+    if(!validatePayrollPeriodEntry(periodData)) return false;
     try {
       let store;
       try { store = JSON.parse(localStorage.getItem(PAYROLL_ACTUALS_STORE_KEY) || 'null'); } catch(e){ store = null; }
@@ -2380,6 +2381,14 @@
   }
 
   // ---- Incentive drill-down (reconciliation table) ----
+  // Restoring a persisted Payroll Actual into this at startup (Phase 1 reload-gate fix) is wired
+  // near the end of this script, NOT here — renderReconComparison() transitively reaches
+  // computeIncomeForDataset(), which needs consts declared much later in the file (e.g.
+  // STANDBY_CODES, INSTRUCTOR_KEY). Running that reconnection immediately after this declaration
+  // hit exactly that TDZ ReferenceError in testing (the same class of bug as the earlier
+  // NYC_AIRPORTS incident) — so the actual invocation runs only after every top-level
+  // declaration in the script has executed. See reconnectPersistedPayrollActualToReconciliation
+  // near the bottom of this script.
   let lastReconContext = null;
   function formatOrdinalDate(dateStr){
     const [dd, mm] = dateStr.split('/').map(Number);
@@ -6619,6 +6628,63 @@
     return (wb.Props && wb.Props.CreatedDate instanceof Date && !isNaN(wb.Props.CreatedDate)) ? wb.Props.CreatedDate.toISOString() : null;
   }
 
+  // ---- Reconnecting a persisted Payroll Actual to Reconciliation (reload gate fix) ----------
+  // The SAME closure handleReconFileUpload() builds for a fresh import's Predicted-side
+  // "unscheduled" checkbox lookup — extracted so a context rebuilt from persisted data uses the
+  // identical semantics, never a second, subtly different implementation of this lookup. The
+  // underlying Unscheduled business rule itself is unchanged.
+  function buildPredictedGetUnsched(){
+    return (d, l, i, j) => {
+      const cb = document.querySelector(`.unsched-check[data-day="${i}"][data-leg="${j}"]`);
+      return cb ? cb.checked : false;
+    };
+  }
+  // Reconstructs the EXACT lastReconContext shape a fresh handleReconFileUpload() import
+  // creates, from an already-persisted period — so a restored Payroll Actual is immediately
+  // usable by Reconciliation without re-uploading the workbook. Deliberately takes a specific
+  // period, not "the roster" or "the latest period" — period SELECTION is a separate concern
+  // (see selectDefaultPersistedPayrollPeriod below), so a future period-selector UI can call this
+  // directly with whichever period the user picks.
+  //
+  // maxDateObj/maxDateStr are recomputed from the period's own `days` the SAME way
+  // handleReconFileUpload() does — the latest date this dataset has any row for — never taken
+  // from periodEndDate (the payroll period's contractual boundary is a different concept from
+  // the file's own data-coverage cutoff; conflating them would make a restored comparison
+  // numerically diverge from what a fresh import of the same file produces). isPartial is
+  // likewise recomputed against the CURRENT live rosterData, never stored statically on the
+  // period, since the roster can change after a payroll import.
+  function buildReconContextFromPayrollPeriod(period){
+    if(!period || !Array.isArray(period.days) || period.days.length === 0) return null;
+    let maxDateObj = null, maxDateStr = null;
+    period.days.forEach(d => {
+      const dObj = buildDateObj(d.date, '23:59', dayYear(d));
+      if(dObj && (!maxDateObj || dObj > maxDateObj)){ maxDateObj = dObj; maxDateStr = d.date; }
+    });
+    if(!maxDateObj) return null;
+    let rosterEndObj = null;
+    rosterData.forEach(d => {
+      const dObj = buildDateObj(d.date, '23:59', dayYear(d));
+      if(dObj && (!rosterEndObj || dObj > rosterEndObj)) rosterEndObj = dObj;
+    });
+    const isPartial = rosterEndObj && maxDateObj < rosterEndObj;
+    return {
+      maxDateObj, maxDateStr,
+      predictedGetUnsched: buildPredictedGetUnsched(),
+      actualDays: period.days, dutyTotals: period.dutyTotals,
+      isPartial, extraNote: period.extraNote, pilotSummary: period.pilotSummary,
+    };
+  }
+  // Phase 1 DEFAULT period-selection policy only — deliberately kept separate from context
+  // reconstruction above, so a future explicit period-selector UI can call
+  // buildReconContextFromPayrollPeriod() directly with any period, bypassing this "pick the
+  // latest" default entirely. 'YYYY-MM' lexical ordering is chronological for this schema.
+  function selectDefaultPersistedPayrollPeriod(){
+    const keys = Object.keys(payrollActuals.periods);
+    if(keys.length === 0) return null;
+    const latestKey = keys.slice().sort()[keys.length - 1];
+    return payrollActuals.periods[latestKey];
+  }
+
   async function handleReconFileUpload(e){
     const file = e.target.files[0];
     if(!file) return;
@@ -6677,8 +6743,10 @@
           const existingPeriod = payrollActuals.periods[incoming.periodKey];
           const verdict = comparePayrollPeriodCompleteness(existingPeriod, incoming);
           if(verdict === 'replace'){
-            savePayrollActual(incoming.periodKey, incoming);
-            extraNote += ' Saved as your persisted Payroll Actual for ' + incoming.periodKey + ' — it\'ll still be here next time you open CrewBoard.';
+            const saved = savePayrollActual(incoming.periodKey, incoming);
+            extraNote += saved
+              ? ' Saved as your persisted Payroll Actual for ' + incoming.periodKey + ' — it\'ll still be here next time you open CrewBoard.'
+              : ' Could not save this as your persisted Payroll Actual — the comparison below still uses this file for this session, but it won\'t be here next time you open CrewBoard.';
           } else {
             extraNote += ' Kept your existing persisted Payroll Actual for ' + incoming.periodKey + ' — this file looked no more complete, so nothing was overwritten.';
           }
@@ -6719,10 +6787,7 @@
 
       status.style.display = 'none';
 
-      const predictedGetUnsched = (d, l, i, j) => {
-        const cb = document.querySelector(`.unsched-check[data-day="${i}"][data-leg="${j}"]`);
-        return cb ? cb.checked : false;
-      };
+      const predictedGetUnsched = buildPredictedGetUnsched();
 
       lastReconContext = {maxDateObj, maxDateStr, predictedGetUnsched, actualDays: parsedDays, dutyTotals, isPartial, extraNote, pilotSummary};
       renderReconComparison();
@@ -7574,6 +7639,25 @@
     const run = () => { maybeShowOnboarding(); if(typeof updatePayIncompleteNotice === 'function') updatePayIncompleteNotice(); };
     if(document.readyState === 'loading') document.addEventListener('DOMContentLoaded', run);
     else run();
+  })();
+
+  // Reconnect a restored Payroll Actual to Reconciliation at startup (Phase 1 reload-gate fix):
+  // without this, restorePayrollActuals() (near the top of this script) puts payrollActuals back
+  // in memory, but Reconciliation (renderReconComparison) only ever reads lastReconContext, which
+  // a plain reload never repopulated — so the restored data existed but was invisible until
+  // re-upload. Runs here, as the LAST step of this script, purely to stay clear of every const
+  // renderReconComparison()'s call chain might need (STANDBY_CODES, INSTRUCTOR_KEY, etc.) — not
+  // because the reconnection logic itself is order-sensitive.
+  // Period SELECTION is a separate concern (selectDefaultPersistedPayrollPeriod's Phase-1-default
+  // "latest period" policy) from context RECONSTRUCTION (buildReconContextFromPayrollPeriod), so a
+  // future period-selector UI can call the latter directly with any period, bypassing this step.
+  (function reconnectPersistedPayrollActualToReconciliation(){
+    const period = selectDefaultPersistedPayrollPeriod();
+    if(!period) return;
+    const ctx = buildReconContextFromPayrollPeriod(period);
+    if(!ctx) return;
+    lastReconContext = ctx;
+    renderReconComparison();
   })();
 
   // ---- Offline support ----
