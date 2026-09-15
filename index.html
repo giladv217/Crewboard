@@ -1435,7 +1435,11 @@
       && typeof p.periodKey === 'string' && /^\d{4}-\d{2}$/.test(p.periodKey)
       && Array.isArray(p.days) && p.days.length <= 400 // generous sanity cap, corruption protection only — not a business rule
       && (p.dutyTotals === undefined || p.dutyTotals === null || Array.isArray(p.dutyTotals))
-      && (p.pilotSummary === undefined || p.pilotSummary === null || typeof p.pilotSummary === 'object');
+      && (p.pilotSummary === undefined || p.pilotSummary === null || typeof p.pilotSummary === 'object')
+      // nfaEntries (Phase 1.5) is additive and optional — a period saved before this phase existed
+      // has no nfaEntries field at all and must still restore normally; only its TYPE is checked
+      // when present, same as dutyTotals/pilotSummary above.
+      && (p.nfaEntries === undefined || p.nfaEntries === null || Array.isArray(p.nfaEntries));
   }
   let payrollActuals = { version: 1, periods: {} };
   function savePayrollActual(periodKey, periodData){
@@ -2419,7 +2423,7 @@
     if(!lastReconContext){ showToast('Run a comparison first'); return; }
     const {maxDateObj, maxDateStr, predictedGetUnsched, actualDays} = lastReconContext;
     const predictedRows = computeIncentiveDetail(rosterData, maxDateObj, predictedGetUnsched);
-    const actualRows = computeIncentiveDetail(actualDays, maxDateObj, null);
+    const actualRows = computeIncentiveDetail(actualDays, maxDateObj, buildActualGetUnsched());
     const renderRows = rows => rows.length
       ? rows.map(r => `<div class="crew-row" style="display:block;">
           <div style="display:flex; justify-content:space-between;"><span>${r.day} ${r.date} — ${r.label}</span><span class="crew-pos" style="color:var(--accent-cyan);">+${r.hours.toFixed(2)}h</span></div>
@@ -6427,7 +6431,12 @@
         // different unit than expected), this stops a garbage value from being trusted —
         // it's flagged as missing instead, same as any other unparseable leg.
         const safeBlock = (block != null && block > 0 && block < 18) ? block : null;
-        return {flt: String(r.FlightNumber || '?'), ac: r.EffectiveAircraftType || '', from: r.LegFrom || '???', to: r.LegTo || '???', time: timeStr, block: safeBlock};
+        // Authoritative BALTAM/Unscheduled signal for this leg (business rule confirmed: AIMSIndicator
+        // 'B2' = בלת"ם/BALTAM = "בלתי מתוכנן" = unscheduled, and qualifies for Incentive 11). Recorded
+        // per LEG, matching the source's own per-leg granularity in CurrentDataOps — never collapsed
+        // onto the whole day, since a duty can mix B2 and non-B2 legs. This is an authoritative Actual
+        // signal, kept completely separate from the Predicted roster's manual Unscheduled checkbox.
+        return {flt: String(r.FlightNumber || '?'), ac: r.EffectiveAircraftType || '', from: r.LegFrom || '???', to: r.LegTo || '???', time: timeStr, block: safeBlock, b2: r.AIMSIndicator === 'B2'};
       });
       const reportRow = rows.find(r => r.ReportTime != null);
       const report = reportRow ? excelTimeToHM(reportRow.ReportTime) : null;
@@ -6449,15 +6458,49 @@
         days.push({date: dateStr, day: WEEK[dObj.getDay()], year: yr, code: 'CXL', label: 'Cancelled assignment (actual)'});
       }
     });
-    let specialCallHours = 0;
     let skippedDurationRows = 0;
+    // Preserve every real CurrentDataNFA row as structured source truth, instead of collapsing
+    // everything but CXL into one undifferentiated scalar. Real August evidence proved
+    // DayofActivity_excel is a flat "counts as one day" marker (always "3:00", even on the
+    // zero-credit B2 special-call marker rows below) -- NOT the differentiated pay-credit amount;
+    // NFAFlightCredits_excel is the authoritative per-row credit. Category is inferred only where
+    // the source's own AIMSActivity/NFAType fields already prove it (CXL/OFFP/standby/training via
+    // AIMSActivity; special project and the B2 marker via NFAType, since those have no reliable
+    // AIMSActivity code) -- no compensation rule is invented from the amount.
+    function classifyNfaRow(r){
+      if(r.AIMSActivity === 'CXL') return 'CXL';
+      if(r.AIMSActivity === 'OFFP') return 'OFFP';
+      if(r.AIMSActivity && STANDBY_CODES.indexOf(r.AIMSActivity) !== -1) return 'STANDBY';
+      if(r.AIMSActivity === 'EDUH') return 'TRAINING';
+      // A B2-flagged "special call" row with the airline's own AIMSActivity holding the qualifying
+      // FLIGHT number (not a category code) is the zero-credit marker evidencing BALTAM/Inc11 on
+      // that flight -- it is NOT itself a paid NFA entitlement (real NFAFlightCredits_excel = 0:00
+      // on every observed occurrence). Never counted as paid NFA; never double-counted with Inc11.
+      if(r.AIMSIndicator === 'B2' && r.NFAType === 'קריאה מיוחדת') return 'B2_MARKER';
+      if(r.NFAType === 'פרויקט מיוחד') return 'SPECIAL_PROJECT';
+      return 'OTHER'; // preserve source type/credit as-is; no normalization invented for it
+    }
+    const nfaEntries = [];
     nfaRows.forEach(r => {
-      if(r.AIMSActivity !== 'CXL' && r.DayofActivity_excel != null){
-        const h = excelDurationToHours(r.DayofActivity_excel, 10); // a single NFA activity is never near a full day
-        if(h) specialCallHours += h;
-        else if(r.DayofActivity_excel != null) skippedDurationRows++;
-      }
+      const dateStr = excelDateToDDMM(r.ActivityDate);
+      if(!dateStr) return;
+      const creditRaw = excelDurationToHours(r.NFAFlightCredits_excel, 10); // a single NFA activity is never near a full day
+      if(r.NFAFlightCredits_excel != null && creditRaw == null) skippedDurationRows++;
+      nfaEntries.push({
+        date: dateStr,
+        sourceActivityType: r.NFAType || null,
+        aimsActivity: r.AIMSActivity || null,
+        category: classifyNfaRow(r),
+        creditHours: creditRaw || 0,
+      });
     });
+    // The fixed replacement for the old (erroneous) specialCallHours scalar: the sum of authoritative
+    // NFAFlightCredits_excel for every non-flight NFA category EXCEPT CXL (already separately
+    // represented as its own `days` entry via countCode('CXL')) and the zero-credit B2 markers (not
+    // real NFA, see above) -- so nothing here is double-counted against Block/Inc11 or the CXL path.
+    const specialCallHours = nfaEntries
+      .filter(e => e.category !== 'CXL' && e.category !== 'B2_MARKER')
+      .reduce((sum, e) => sum + e.creditHours, 0);
 
     // CurrentDataDuties has the airline's own authoritative TT (trip time) and completion
     // top-up per duty period — use these instead of recomputing them ourselves, since our own
@@ -6489,7 +6532,7 @@
       dutyTotals.push({date: dateStr, tt: ttRaw || 0, topUp: topUpByDate[dateStr] || 0});
     });
 
-    return {days, specialCallHours, dutyTotals, skippedDurationRows, pilotSummary: parseReportPilotSummary(wb)};
+    return {days, specialCallHours, nfaEntries, dutyTotals, skippedDurationRows, pilotSummary: parseReportPilotSummary(wb)};
   }
 
   function findRowValue(rows, label){
@@ -6639,6 +6682,17 @@
       return cb ? cb.checked : false;
     };
   }
+  // The Actual-side counterpart to buildPredictedGetUnsched() above — reuses the SAME
+  // computeCreditCore/computeIncentiveDetail multiplier logic (Unscheduled x1.5, stacking with
+  // Shabbat to the existing x2 cap), but the qualifying signal comes from the leg's own
+  // authoritative b2 flag (set by parseAimsWorkbook from CurrentDataOps.AIMSIndicator==='B2' --
+  // real August evidence: BALTAM/B2 qualifies for Incentive 11, proven exactly 0.5x block on all 6
+  // real occurrences) rather than a DOM checkbox or the Predicted roster's manual selection. Predicted
+  // and Actual "unscheduled" evidence are deliberately never mixed: Actual never reads a checkbox,
+  // Predicted never reads b2.
+  function buildActualGetUnsched(){
+    return (d, l) => !!(l && l.b2);
+  }
   // Reconstructs the EXACT lastReconContext shape a fresh handleReconFileUpload() import
   // creates, from an already-persisted period — so a restored Payroll Actual is immediately
   // usable by Reconciliation without re-uploading the workbook. Deliberately takes a specific
@@ -6738,6 +6792,7 @@
             importedAt: new Date().toISOString(),
             sourceFileName: file.name || null,
             days: aims.days, dutyTotals: aims.dutyTotals, pilotSummary: aims.pilotSummary,
+            nfaEntries: aims.nfaEntries, specialCallHours: aims.specialCallHours,
             skippedDurationRows: aims.skippedDurationRows, extraNote,
           };
           const existingPeriod = payrollActuals.periods[incoming.periodKey];
@@ -6826,7 +6881,7 @@
       // tripTimeTotal) and Total Credit Hours (via tripTimeCreditHours).
       actualOverrides = {tripTimeTotal, tripTimeCreditHours: tripTimeTotal, completion};
     }
-    const actual = computeIncomeForDataset(actualDays, maxDateObj, null, actualOverrides);
+    const actual = computeIncomeForDataset(actualDays, maxDateObj, buildActualGetUnsched(), actualOverrides);
     const pilotSummary = lastReconContext.pilotSummary;
     if(pilotSummary){
       // Report Pilot's totals already cover exactly the same as-of date as the rest of the
