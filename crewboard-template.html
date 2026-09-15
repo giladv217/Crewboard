@@ -6376,25 +6376,31 @@
     if(typeof val === 'string'){ const m = val.match(/(\d{4})-(\d{2})-(\d{2})/); if(m) return parseInt(m[1], 10); }
     return null;
   }
+  // SheetJS's cellDates:true conversion constructs date/duration/time-formatted cells via the
+  // LOCAL Date constructor (new Date(y,m,d,H,M,S)), not Date.UTC. For whole-day DATE values this
+  // is harmless — excelDateToDDMM/excelDateYear round to the nearest day, absorbing any shift up
+  // to ~12h — but for SUB-DAY values (durations AND clock times) there is no day to round to, so
+  // the runtime's local timezone's HISTORICAL offset for the 1899-12-30 reference date (e.g.
+  // Asia/Jerusalem's pre-standardization Local Mean Time, ~2h20m — NOT the modern UTC+2/+3)
+  // directly corrupts the result. Verified against real Fanfare workbooks: a genuine 2:30
+  // duration round-tripped through SheetJS's Date conversion read back as ~0:09:20, and a real
+  // 13:17 departure time read back as ~10:56, both compared against Date.UTC(1899,11,30).
+  // Computing the reference point the SAME way SheetJS's own conversion does (the local Date
+  // constructor, not Date.UTC) exactly cancels this out regardless of which timezone the
+  // browser/runtime actually is in — confirmed exact, to the second, against every duration
+  // column and representative clock-time cell in those real files, including multi-day values
+  // and the 00:00/23:59 boundary.
+  const EXCEL_EPOCH_LOCAL = new Date(1899, 11, 30).getTime();
   function excelTimeToHM(val){
-    if(val instanceof Date && !isNaN(val)) return String(val.getUTCHours()).padStart(2, '0') + ':' + String(val.getUTCMinutes()).padStart(2, '0');
+    if(val instanceof Date && !isNaN(val)){
+      const totalMin = Math.round((val.getTime() - EXCEL_EPOCH_LOCAL) / 60000);
+      const m = ((totalMin % 1440) + 1440) % 1440; // wrap into a single day, defensively handling any negative residual
+      return String(Math.floor(m / 60)).padStart(2, '0') + ':' + String(m % 60).padStart(2, '0');
+    }
     if(typeof val === 'string'){ const m = val.match(/(\d{1,2}):(\d{2})/); if(m) return m[1].padStart(2, '0') + ':' + m[2]; }
     if(typeof val === 'number'){ const t = Math.round(val * 1440) % 1440; return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
     return null;
   }
-  // SheetJS's cellDates:true conversion constructs date/duration-formatted cells via the LOCAL
-  // Date constructor (new Date(y,m,d,H,M,S)), not Date.UTC. For whole-day DATE values this is
-  // harmless — excelDateToDDMM/excelDateYear round to the nearest day, absorbing any shift up to
-  // ~12h — but for SUB-DAY DURATION values there is no day to round to, so the runtime's local
-  // timezone's HISTORICAL offset for the 1899-12-30 reference date (e.g. Asia/Jerusalem's
-  // pre-standardization Local Mean Time, ~2h20m — NOT the modern UTC+2/+3) directly corrupts the
-  // result. Verified against a real Fanfare workbook: a genuine 2:30 duration round-tripped
-  // through SheetJS's Date conversion read back as ~0:09:20 when compared against
-  // Date.UTC(1899,11,30). Computing the reference point the SAME way SheetJS's own conversion
-  // does (the local Date constructor, not Date.UTC) exactly cancels this out regardless of which
-  // timezone the browser/runtime actually is in — confirmed exact, to the second, against every
-  // duration column in that real file, including multi-day values.
-  const EXCEL_EPOCH_LOCAL = new Date(1899, 11, 30).getTime();
   function excelDurationToHours(val, capHours){
     let h = null;
     if(val instanceof Date && !isNaN(val)) h = (val.getTime() - EXCEL_EPOCH_LOCAL) / 3600000; // elapsed hours since epoch — correct for both sub-24h AND multi-day durations, unlike reading getUTCHours() alone which silently drops whole days
