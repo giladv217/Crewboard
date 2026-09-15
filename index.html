@@ -6382,10 +6382,22 @@
     if(typeof val === 'number'){ const t = Math.round(val * 1440) % 1440; return String(Math.floor(t / 60)).padStart(2, '0') + ':' + String(t % 60).padStart(2, '0'); }
     return null;
   }
-  const EXCEL_EPOCH_UTC = Date.UTC(1899, 11, 30); // standard Excel/SheetJS date-serial epoch
+  // SheetJS's cellDates:true conversion constructs date/duration-formatted cells via the LOCAL
+  // Date constructor (new Date(y,m,d,H,M,S)), not Date.UTC. For whole-day DATE values this is
+  // harmless — excelDateToDDMM/excelDateYear round to the nearest day, absorbing any shift up to
+  // ~12h — but for SUB-DAY DURATION values there is no day to round to, so the runtime's local
+  // timezone's HISTORICAL offset for the 1899-12-30 reference date (e.g. Asia/Jerusalem's
+  // pre-standardization Local Mean Time, ~2h20m — NOT the modern UTC+2/+3) directly corrupts the
+  // result. Verified against a real Fanfare workbook: a genuine 2:30 duration round-tripped
+  // through SheetJS's Date conversion read back as ~0:09:20 when compared against
+  // Date.UTC(1899,11,30). Computing the reference point the SAME way SheetJS's own conversion
+  // does (the local Date constructor, not Date.UTC) exactly cancels this out regardless of which
+  // timezone the browser/runtime actually is in — confirmed exact, to the second, against every
+  // duration column in that real file, including multi-day values.
+  const EXCEL_EPOCH_LOCAL = new Date(1899, 11, 30).getTime();
   function excelDurationToHours(val, capHours){
     let h = null;
-    if(val instanceof Date && !isNaN(val)) h = (val.getTime() - EXCEL_EPOCH_UTC) / 3600000; // elapsed hours since epoch — correct for both sub-24h AND multi-day durations, unlike reading getUTCHours() alone which silently drops whole days
+    if(val instanceof Date && !isNaN(val)) h = (val.getTime() - EXCEL_EPOCH_LOCAL) / 3600000; // elapsed hours since epoch — correct for both sub-24h AND multi-day durations, unlike reading getUTCHours() alone which silently drops whole days
     else if(typeof val === 'string'){ const m = val.match(/(\d{1,3}):(\d{2})(?::(\d{2}))?/); if(m) h = parseInt(m[1], 10) + parseInt(m[2], 10) / 60 + (m[3] ? parseInt(m[3], 10) / 3600 : 0); }
     else if(typeof val === 'number') h = val * 24;
     if(h == null) return null;
